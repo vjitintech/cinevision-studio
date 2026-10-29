@@ -125,25 +125,71 @@ def user(server):
     return c
 
 
+def texture(path: Path, w=2400, h=1350, seed=1) -> Path:
+    """Deterministic, richly textured still (rectangles, circles, lines) — ideal for verifying motion tracking."""
+    import cv2
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    img = np.full((h, w, 3), (40, 60, 80), np.uint8)
+    for _ in range(900):
+        c = tuple(int(x) for x in rng.integers(0, 255, 3))
+        x, y = int(rng.integers(0, w)), int(rng.integers(0, h))
+        kind = rng.integers(0, 3)
+        if kind == 0:
+            cv2.rectangle(img, (x, y), (x + int(rng.integers(8, 90)), y + int(rng.integers(8, 90))), c, -1)
+        elif kind == 1:
+            cv2.circle(img, (x, y), int(rng.integers(4, 40)), c, -1)
+        else:
+            cv2.line(img, (x, y), (x + int(rng.integers(-150, 150)), y + int(rng.integers(-150, 150))), c, 3)
+    cv2.imwrite(str(path), img)
+    return path
+
+
+def _zoom_clip(path, tex, duration, w, h, fps, codec):
+    """Exact centre zoom rendered in Python (12% per second) and piped to ffmpeg."""
+    import cv2
+    img = cv2.imread(str(tex))
+    H, W = img.shape[:2]
+    proc = subprocess.Popen(["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{w}x{h}",
+                             "-r", str(fps), "-i", "-", "-c:v", codec, "-pix_fmt", "yuv420p", str(path)], stdin=subprocess.PIPE)
+    for i in range(int(duration * fps)):
+        z = 1 + 0.12 * i / fps
+        cw, ch = 1280 / z, 720 / z
+        x0, y0 = (W - cw) / 2, (H - ch) / 2
+        M = cv2.getAffineTransform(
+            __import__("numpy").float32([[x0, y0], [x0 + cw, y0], [x0, y0 + ch]]),
+            __import__("numpy").float32([[0, 0], [w, 0], [0, h]]))
+        proc.stdin.write(cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_AREA).tobytes())
+    proc.stdin.close()
+    assert proc.wait() == 0
+    return path
+
+
 def make_clip(path: Path, *, duration=4, size="640x360", pattern="pan", fps=24, codec="libx264", extra=None):
-    """Synthetic clips with known properties. 'pan' = horizontally scrolling texture; 'cut' = two scenes."""
+    """Synthetic clips with known ground truth, built from still textures so the only motion is the camera's.
+    pan: camera pans right · static: locked off · zoom: push in · cut: two different scenes."""
+    tex = texture(path.with_suffix(".tex1.png"), seed=1)
+    w, h = (int(x) for x in size.split("x"))
     if pattern == "pan":
-        src = (f"testsrc2=size=1280x720:rate={fps}:duration={duration},"
-               f"crop=640:360:x='min(t*120,600)':y=180,scale={size.replace('x', ':')}")
-        cmd = ["-f", "lavfi", "-i", src]
+        cmd = ["-loop", "1", "-framerate", str(fps), "-t", str(duration), "-i", str(tex),
+               "-vf", f"crop=1280:720:x='t*160':y=300,scale={w}:{h}"]
     elif pattern == "static":
-        cmd = ["-f", "lavfi", "-i", f"testsrc2=size={size}:rate={fps}:duration={duration}"]
-    elif pattern == "cut":
-        half = duration / 2
-        cmd = ["-f", "lavfi", "-i", f"color=c=0x203050:size={size}:rate={fps}:duration={half}",
-               "-f", "lavfi", "-i", f"testsrc2=size={size}:rate={fps}:duration={half}",
-               "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0[v]", "-map", "[v]"]
+        cmd = ["-loop", "1", "-framerate", str(fps), "-t", str(duration), "-i", str(tex),
+               "-vf", f"crop=1280:720:400:300,scale={w}:{h}"]
     elif pattern == "zoom":
-        cmd = ["-f", "lavfi", "-i", f"testsrc2=size=1280x720:rate={fps}:duration={duration}",
-               "-vf", f"zoompan=z='1+0.004*on':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={size}:fps={fps}"]
+        return _zoom_clip(path, tex, duration, w, h, fps, codec)
+    elif pattern == "cut":
+        tex2 = texture(path.with_suffix(".tex2.png"), seed=9)
+        half = duration / 2
+        cmd = ["-loop", "1", "-framerate", str(fps), "-t", str(half), "-i", str(tex),
+               "-loop", "1", "-framerate", str(fps), "-t", str(half), "-i", str(tex2),
+               "-filter_complex", f"[0:v]crop=1280:720:400:300,scale={w}:{h},setsar=1[a];"
+                                  f"[1:v]eq=brightness=-0.25,crop=1280:720:0:0,scale={w}:{h},setsar=1[b];[a][b]concat=n=2:v=1:a=0[v]",
+               "-map", "[v]"]
     else:
         raise ValueError(pattern)
-    full = ["ffmpeg", "-y", "-loglevel", "error", *cmd, "-c:v", codec, "-pix_fmt", "yuv420p", *(extra or []), str(path)]
+    full = ["ffmpeg", "-y", "-loglevel", "error", *cmd, "-c:v", codec, "-pix_fmt", "yuv420p", "-r", str(fps),
+            *(extra or []), str(path)]
     subprocess.run(full, check=True)
     return path
 
