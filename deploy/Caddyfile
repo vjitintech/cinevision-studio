@@ -1,0 +1,18 @@
+{
+	admin off
+	auto_https disable_redirects
+}
+
+https://localhost:8443 {
+	tls internal
+	encode zstd gzip
+	request_body {
+		max_size 520MB
+	}
+	header -Server
+	# access log intentionally omitted: media URLs carry short-lived tokens
+	reverse_proxy api:8000 {
+		header_up X-Forwarded-For {remote_host}
+		flush_interval -1
+	}
+}

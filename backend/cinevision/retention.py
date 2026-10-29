@@ -33,8 +33,20 @@ def delete_project(project_id: str, owner_id: str, *, reason: str = "user_reques
     return True
 
 
-def cleanup_temp(max_age_hours: int = 24) -> int:
-    """Remove job scratch dirs and partial uploads left behind by crashes."""
+def temp_retention_hours() -> int:
+    """Strictest owner setting wins (scratch space is shared by the deployment)."""
+    try:
+        row = db.one("SELECT MIN(temp_retention_hours) h FROM privacy_settings")
+        return int(row["h"]) if row and row["h"] else 24
+    except Exception:
+        return 24
+
+
+def cleanup_temp(max_age_hours: int | None = None) -> int:
+    """Remove job scratch dirs and partial uploads left behind by crashes. Normal jobs delete their own
+    scratch space immediately (storage.private_tempdir); this only catches crash leftovers."""
+    if max_age_hours is None:
+        max_age_hours = temp_retention_hours()
     root = settings().tmp_dir
     if not root.exists():
         return 0

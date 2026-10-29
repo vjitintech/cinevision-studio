@@ -58,6 +58,7 @@ export function figure(s: { id: string; x: number; z: number; height: number; fa
     ...box(at(1.47), [0.11 * k, 0.08 * k, 0.11 * k], yaw, SKIN, s.id),
     ...sphere(at(1.6), 0.115 * k, SKIN, s.id),
     ...box(at(1.6, 0.11 * k), [0.035 * k, 0.05 * k, 0.04 * k], yaw, mul(SKIN, 0.9), s.id),
+    ...box(at(1.635, 0.095 * k), [0.13 * k, 0.022 * k, 0.03 * k], yaw, [0.12, 0.1, 0.1], s.id), // eye line: shows facing
   ];
 }
 

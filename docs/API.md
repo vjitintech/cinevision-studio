@@ -50,6 +50,7 @@ Rate limit → `429` with `Retry-After`.
 | Method | Path | Description |
 |---|---|---|
 | POST | `/api/projects/{pid}/video` | `multipart/form-data` field `file`; validates, encrypts, enqueues ingest. One clip per project (replace = delete + upload). |
+| DELETE | `/api/projects/{pid}/video` | remove the clip and everything derived from it (to replace it) |
 | POST | `/api/projects/{pid}/media-token` | `{blob_id}` → `{url, expires_in}` short-lived (≤5 min) token bound to user+session+blob |
 | GET | `/api/media/{blob_id}?t=…` | decrypting stream with HTTP Range support; requires session **and** valid token |
 | GET | `/api/projects/{pid}/frames` | keyframe list (ids, timestamps, shot index) |
@@ -76,8 +77,9 @@ Rate limit → `429` with `Retry-After`.
 | GET | `/api/concepts/{cid}/history` | revisions in the lineage |
 | POST | `/api/concepts/{cid}/refine` | `{command}` or `{patch}` → new revision; returns `{concept, applied, unrecognized}` |
 | POST | `/api/concepts/{cid}/select` | mark as chosen concept |
-| GET/PUT | `/api/concepts/{cid}/camera/{shot}` | camera planner state |
-| GET/PUT | `/api/concepts/{cid}/lighting/{shot}` | lighting plan |
+| POST | `/api/concepts/{cid}/revert` | restore an older revision (as a new revision) |
+| GET/PUT/DELETE | `/api/concepts/{cid}/camera/{shot}` | camera planner state (DELETE = back to concept default) |
+| GET/PUT/DELETE | `/api/concepts/{cid}/lighting/{shot}` | lighting plan |
 | GET/PUT | `/api/concepts/{cid}/storyboard` | storyboard + animatic timing |
 | GET/PUT | `/api/concepts/{cid}/scene3d` | 3D proxy scene |
 | POST | `/api/concepts/{cid}/shotlist` | snapshot a shot list |
