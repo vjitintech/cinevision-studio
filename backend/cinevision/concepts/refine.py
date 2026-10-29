@@ -23,7 +23,7 @@ def rebuild_shot(concept: dict, s: dict) -> None:
                      perspective=G.perspective_note(ff))
     s["distance_m"] = G.distance_for(s["size"], ff, sensor)
     sub = next((x for x in concept["scene"]["subjects"] if x["id"] == s.get("subject_target")), concept["scene"]["subjects"][0])
-    target = [sub["x"], 1.45, sub["z"]]
+    target = [sub["x"], round(G.SUBJECT_REF_HEIGHT.get(s["size"], 1.35) * sub.get("height", 1.7) / 1.7, 3), sub["z"]]
     pos = G.orbit_position(tuple(target), s["azimuth_deg"], s["distance_m"], s["camera_height_m"], sub["facing_deg"])
     s["viewing_direction"] = builder._view_label(s["azimuth_deg"])
     sp = s["movement"]["speed_m_s"]
@@ -287,9 +287,7 @@ NUMBERS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
 def parse(command: str) -> tuple[list[tuple[callable, int | None, int, str]], list[str]]:
     """Split into clauses; each clause may match several rules. Returns ops and unrecognised clauses."""
     ops, unknown = [], []
-    clauses = [c.strip() for c in re.split(r"[.;\n]|,|\band\s+(?=(make|move|create|give|add|keep|use|go|set)\b)", command,
-                                          flags=re.I) if c and c.strip() and c.strip().lower() not in
-               ("make", "move", "create", "give", "add", "keep", "use", "go", "set")]
+    clauses = [c.strip() for c in re.split(r"[.;\n,]|\band\b|\bthen\b", command, flags=re.I) if c and c.strip()]
     for cl in clauses:
         low = cl.lower()
         m = re.search(r"\bshot\s+(\d+)\b", low)

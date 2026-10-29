@@ -96,10 +96,12 @@ async def list_concepts(request: Request):
     ctx = current(request)
     pid = request.path_params["pid"]
     owned_project(ctx, pid)
-    rows = [dict(r) for r in db.all_("SELECT * FROM cinematography_concepts WHERE project_id=? AND owner_id=? AND is_current=1"
-                                     " ORDER BY created_at DESC", (pid, ctx.uid))]
+    rows = [dict(r) for r in db.all_("SELECT *, rowid AS _rid FROM cinematography_concepts WHERE project_id=? AND owner_id=?"
+                                     " AND is_current=1 ORDER BY created_at DESC", (pid, ctx.uid))]
     if request.query_params.get("all") != "1" and rows:
-        latest_batch = max(rows, key=lambda r: r["created_at"])["batch_id"]
+        # newest generation batch = the batch whose first concept was inserted last (rowid order, not timestamps)
+        latest_batch = db.one("SELECT batch_id FROM cinematography_concepts WHERE project_id=? AND owner_id=? AND revision=1"
+                              " ORDER BY rowid DESC LIMIT 1", (pid, ctx.uid))["batch_id"]
         rows = [r for r in rows if r["batch_id"] == latest_batch or r["is_selected"]]
     rows.sort(key=lambda r: (json.loads(r["engine"]).get("score") is None, -(json.loads(r["engine"]).get("score") or 0)))
     return ok({"concepts": [_concept_out(r) for r in rows]})
@@ -172,7 +174,21 @@ async def refine_concept(request: Request):
                    row["revision"] + 1, row["is_selected"], k.enc_json(new, f"cinematography_concepts:data:{nid}"),
                    json.dumps({**json.loads(row["engine"]), "refined_with": used_model or "rule-parser"}),
                    k.enc(" ".join(applied)[:2000], f"cinematography_concepts:note:{nid}"), db.now_iso()))
-        # carry planner state forward to the new revision
+        # carry planner state, storyboard notes and 3D layout forward to the new revision
+        for table in ("three_d_scenes", "storyboards"):
+            r = c.execute(f"SELECT * FROM {table} WHERE concept_id=?", (row["id"],)).fetchone()
+            if r:
+                new_id = db.new_id()
+                payload = k.dec_json(r["data_enc"], f"{table}:data:{r['id']}")
+                c.execute(f"INSERT INTO {table}(id,owner_id,project_id,concept_id,data_enc,updated_at) VALUES (?,?,?,?,?,?)",
+                          (new_id, ctx.uid, row["project_id"], nid, k.enc_json(payload, f"{table}:data:{new_id}"), db.now_iso()))
+                if table == "storyboards":
+                    a = c.execute("SELECT * FROM animatics WHERE storyboard_id=?", (r["id"],)).fetchone()
+                    if a:
+                        aid2 = db.new_id()
+                        ad = k.dec_json(a["data_enc"], f"animatics:data:{a['id']}")
+                        c.execute("INSERT INTO animatics(id,owner_id,project_id,storyboard_id,data_enc,updated_at) VALUES (?,?,?,?,?,?)",
+                                  (aid2, ctx.uid, row["project_id"], new_id, k.enc_json(ad, f"animatics:data:{aid2}"), db.now_iso()))
         for table in ("camera_configurations", "lighting_configurations"):
             for r in c.execute(f"SELECT * FROM {table} WHERE concept_id=?", (row["id"],)).fetchall():
                 new_id = db.new_id()

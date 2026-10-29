@@ -173,10 +173,12 @@ def scene_model(analysis: dict) -> dict:
     }
 
 
-def _target(scene: dict, idx: int) -> tuple[list[float], dict]:
+def _target(scene: dict, idx: int, size: str = "medium") -> tuple[list[float], dict]:
+    """Aim point on the subject: eyes for close sizes, chest/centre for wider ones (scaled by subject height)."""
     subs = scene["subjects"]
     sub = subs[idx % len(subs)]
-    return [sub["x"], 1.45, sub["z"]], sub
+    y = G.SUBJECT_REF_HEIGHT.get(size, 1.35) * sub.get("height", 1.7) / 1.7
+    return [sub["x"], round(y, 3), sub["z"]], sub
 
 
 # ---------------------------------------------------------------- movement
@@ -299,7 +301,7 @@ def build_concept(key: str, why: list[str], analysis: dict, c: dict, variant: in
         if key == "suspense" and i == n - 1:
             angle = "eye level"
         height, tilt = G.ANGLES.get(angle, G.ANGLES["eye level"])
-        target, sub = _target(scene, i if len(scene["subjects"]) > 1 else 0)
+        target, sub = _target(scene, i if len(scene["subjects"]) > 1 else 0, size)
         comp = a["composition"]
         az = {"three-quarter": 35, "profile": 80, "frontal": 0, "over-the-shoulder": 150, "centred": 0, "through": 60}
         azimuth = next((v for k, v in az.items() if k in comp), 30) * (1 if (i + variant) % 2 == 0 else -1)
