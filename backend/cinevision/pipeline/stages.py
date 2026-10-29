@@ -124,3 +124,40 @@ def analyze(ctx: jobs.JobContext, params: dict) -> str:
                       " ORDER BY ABS(t_s-?) LIMIT 1)", (v["id"], sh["representative_t"]))
         c.execute("UPDATE projects SET updated_at=? WHERE id=?", (db.now_iso(), v["project_id"]))
     return aid
+
+
+@handler("concepts")
+def concepts(ctx: jobs.JobContext, params: dict) -> str:
+    from ..concepts import builder
+
+    owner, pid = ctx.job["owner_id"], ctx.job["project_id"]
+    proj = db.one("SELECT status FROM projects WHERE id=? AND owner_id=?", (pid, owner))
+    if not proj or proj["status"] != "active":
+        raise jobs.Cancelled()
+    row = db.one("SELECT * FROM scene_analyses WHERE project_id=? AND owner_id=?", (pid, owner))
+    if row is None:
+        raise UserFacingError("Analyse the clip before generating concepts.")
+    k = keyring()
+    analysis = k.dec_json(row["data_enc"], f"scene_analyses:data:{row['id']}")
+    ctx.progress(0.2, "Scoring creative approaches")
+    concepts_ = builder.generate(analysis, params.get("controls") or {})
+    ctx.progress(0.8, "Saving concepts")
+    ctx.check_cancel()
+    batch = db.new_id()
+    ctl = params.get("controls") or {}
+    recorded = {k: ctl.get(k) for k in ("movement_intensity", "lighting_complexity", "budget", "preservation", "treatment",
+                                        "sensor", "concept_count", "intent", "aspect_ratio", "frame_rate")}
+    with db.tx() as c:
+        # a retried job replaces its own earlier output instead of adding a second batch
+        c.execute("DELETE FROM cinematography_concepts WHERE project_id=? AND batch_id IN "
+                  "(SELECT batch_id FROM cinematography_concepts WHERE engine LIKE ?)", (pid, f'%"job": "{ctx.id}"%'))
+        for con in concepts_:
+            cid = db.new_id()
+            eng = json.dumps({**builder.ENGINE, "job": ctx.id, "archetype": con["archetype"], "score": con.get("score"),
+                              "controls_hash": params.get("controls_hash"), "settings": recorded})
+            c.execute("INSERT INTO cinematography_concepts(id,owner_id,project_id,analysis_id,batch_id,lineage_id,parent_id,"
+                      "revision,is_current,is_selected,data_enc,engine,created_at) VALUES (?,?,?,?,?,?,NULL,1,1,0,?,?,?)",
+                      (cid, owner, pid, row["id"], batch, cid, k.enc_json(con, f"cinematography_concepts:data:{cid}"),
+                       eng, db.now_iso()))
+        c.execute("UPDATE projects SET updated_at=? WHERE id=?", (db.now_iso(), pid))
+    return batch
