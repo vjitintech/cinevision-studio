@@ -63,7 +63,8 @@ def detect(bgr: np.ndarray) -> dict:
     rects, weights = _get_hog().detectMultiScale(img, winStride=(8, 8), padding=(8, 8), scale=1.06)
     people = []
     for (x, y, rw, rh), sc in zip(rects, np.ravel(weights) if len(rects) else []):
-        if sc > 0.7 and rh / max(rw, 1) > 1.6:
+        # stricter than OpenCV's default: confident, person-shaped, and not cut off by the left/right frame edge
+        if sc > 1.0 and rh / max(rw, 1) > 1.6 and x > 2 and x + rw < iw - 2:
             people.append([float(x), float(y), float(rw), float(rh), float(sc)])
     people = _nms(people)
     faces = []
@@ -83,8 +84,12 @@ def detect(bgr: np.ndarray) -> dict:
 
 def shot_size(dets_per_frame: list[dict], saliency_share: float) -> dict:
     """Estimate shot size from face height (preferred), body height, or salient-area share (weakest)."""
+    # only trust detections that persist in at least half of the sampled frames (filters one-off false positives)
+    half = max(1, (len(dets_per_frame) + 1) // 2)
     face_h = [max(f["h"] for f in d["faces"]) for d in dets_per_frame if d["faces"]]
     body_h = [max(p["h"] for p in d["people"]) for d in dets_per_frame if d["people"]]
+    face_h = face_h if len(face_h) >= half else []
+    body_h = body_h if len(body_h) >= half else []
     if face_h:
         fh = float(np.median(face_h))
         size = ("extreme close-up" if fh > 0.55 else "close-up" if fh > 0.28 else "medium close-up" if fh > 0.16
@@ -104,15 +109,19 @@ def summarise(dets_per_frame: list[dict]) -> dict:
     counts = [max(len(d["people"]), len(d["faces"])) for d in dets_per_frame]
     n = int(round(float(np.median(counts)))) if counts else 0
     peak = max(counts) if counts else 0
+    if n == 0:
+        peak = 0  # a detection seen in fewer than half the frames is treated as noise
     positions = []
     best = max(dets_per_frame, key=lambda d: len(d["people"]) + len(d["faces"]), default=None)
-    if best:
+    if best and n > 0:
         src = best["faces"] or best["people"]
         for b in sorted(src, key=lambda b: b["x"]):
             positions.append({"x": round(b["x"] + b["w"] / 2, 3), "y": round(b["y"] + b["h"] / 2, 3), "h": b["h"],
                               "kind": "face" if best["faces"] else "body"})
     conf = 0.55 if any(d["faces"] for d in dets_per_frame) else 0.4 if peak else 0.25
-    note = None if peak else "No people detected. Close-ups, partial bodies and non-human subjects are often missed."
+    note = ("Classic (HOG) people detector: upright shapes such as poles, statues or a rocket can be counted as a person, "
+            "and close-ups or seated people are often missed." if peak else
+            "No people detected. Close-ups, partial bodies and seated people are often missed by this detector.")
     return {
         "count": tag(n, conf, "estimated", note),
         "max_visible": tag(peak, conf, "estimated"),
