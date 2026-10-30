@@ -38,7 +38,7 @@ def put_stream(src: BinaryIO, *, owner_id: str, project_id: str, kind: str, cont
     path = blob_path(blob_id)
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     tmp = path.with_suffix(".partial")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o600)
     try:
         with os.fdopen(fd, "wb") as dst:
             size, digest = encrypt_stream(src, dst, dek, blob_id)
@@ -89,7 +89,7 @@ def private_tempdir(prefix: str = "job-") -> Iterator[Path]:
 
 
 def decrypt_to_file(blob_row, dest: Path) -> Path:
-    fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o600)
     with os.fdopen(fd, "wb") as f:
         if blob_row["plaintext_size"]:
             reader(blob_row).decrypt_to(f)
@@ -101,7 +101,12 @@ def destroy_blob_file(blob_id: str) -> None:
         p = blob_path(blob_id)
     except StorageError:
         return
-    p.unlink(missing_ok=True)
+    try:
+        p.unlink(missing_ok=True)
+    except PermissionError:
+        # Windows refuses to delete a file that is still open (e.g. mid-stream). The wrapped key is already gone,
+        # so the ciphertext is unreadable; startup cleanup removes orphans later.
+        return
     try:
         p.parent.rmdir()
     except OSError:

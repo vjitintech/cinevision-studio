@@ -19,7 +19,7 @@ def test_chunked_roundtrip_and_ranges(tmp_path, ring, size):
     with open(p, "wb") as f:
         n, _ = encrypt_stream(io.BytesIO(data), f, dek, "b1")
     assert n == size
-    assert data[:64] not in p.read_bytes() or size == 0
+    assert size < 16 or data[:64] not in p.read_bytes()   # tiny inputs can appear in ciphertext by chance
     r = EncryptedReader(p, dek, "b1", size)
     assert (r.read_all() if size else b"") == data
     if size > 10:

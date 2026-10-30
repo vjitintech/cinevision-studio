@@ -59,6 +59,18 @@ def cleanup_temp(max_age_hours: int | None = None) -> int:
                 removed += 1
         except FileNotFoundError:
             pass
+    # encrypted files whose key row is gone (deleted while Windows still had them open) are unreadable leftovers
+    try:
+        known = {r["id"] for r in db.all_("SELECT id FROM blobs")}
+        for f in settings().blob_dir.glob("*/*.cve"):
+            if f.stem not in known:
+                try:
+                    f.unlink()
+                    removed += 1
+                except OSError:
+                    pass
+    except Exception:
+        pass
     for partial in settings().blob_dir.glob("*/*.partial"):
         if partial.stat().st_mtime < cutoff:
             partial.unlink(missing_ok=True)

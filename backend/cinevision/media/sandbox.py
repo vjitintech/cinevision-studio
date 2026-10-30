@@ -1,18 +1,23 @@
 """Run media tools on untrusted input with hard resource limits.
 
 Defence in depth (in addition to container isolation in deploy/):
-* fresh session, empty environment, no stdin
-* RLIMIT_CPU / RLIMIT_AS / RLIMIT_FSIZE / RLIMIT_NOFILE, no core dumps
-* wall-clock timeout with process-group kill
+* fresh session, minimal environment, no stdin
+* Linux/macOS: RLIMIT_CPU / RLIMIT_AS / RLIMIT_FSIZE / RLIMIT_NOFILE, no core dumps, process-group kill
+* Windows (native, no Docker): no rlimits are available, so only the wall-clock timeout and a minimal
+  environment apply — run under Docker Desktop when processing footage you don't trust
 * callers pass `-protocol_whitelist file` so container tricks can't reach the network
 """
 from __future__ import annotations
 
 import os
-import resource
 import signal
 import subprocess
+import sys
 from dataclasses import dataclass
+
+WINDOWS = sys.platform == "win32"
+if not WINDOWS:
+    import resource
 
 
 class SandboxError(Exception):
@@ -39,16 +44,31 @@ def _preexec(lim: Limits):
     return fn
 
 
+def _env() -> dict:
+    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LC_ALL": "C"}
+    if WINDOWS:  # Windows programs need these to start at all
+        for k in ("SYSTEMROOT", "SystemRoot", "WINDIR", "TEMP", "TMP", "PATHEXT"):
+            if k in os.environ:
+                env[k] = os.environ[k]
+    return env
+
+
 def run(cmd: list[str], limits: Limits | None = None, cwd: str | None = None) -> subprocess.CompletedProcess:
     lim = limits or Limits()
-    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LC_ALL": "C"}
-    proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            env=env, cwd=cwd, preexec_fn=_preexec(lim), close_fds=True)
+    kw: dict = {"stdin": subprocess.DEVNULL, "stdout": subprocess.PIPE, "stderr": subprocess.PIPE, "env": _env(), "cwd": cwd}
+    if WINDOWS:
+        kw["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    else:
+        kw.update(preexec_fn=_preexec(lim), close_fds=True)
+    proc = subprocess.Popen(cmd, **kw)
     try:
         out, err = proc.communicate(timeout=lim.timeout_s)
     except subprocess.TimeoutExpired:
         try:
-            os.killpg(proc.pid, signal.SIGKILL)
+            if WINDOWS:
+                proc.kill()
+            else:
+                os.killpg(proc.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
         proc.communicate()

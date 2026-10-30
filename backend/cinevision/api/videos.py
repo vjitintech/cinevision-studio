@@ -60,7 +60,7 @@ class _UploadSink:
             if self.files_seen > 1:
                 raise ApiError(422, "one_file_only", "Upload one clip at a time.")
             self.filename = opts[b"filename"].decode("utf-8", "replace")[:255]
-            fd = os.open(self.dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            fd = os.open(self.dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o600)
             self.fh = os.fdopen(fd, "wb")
             self._in_file = True
 

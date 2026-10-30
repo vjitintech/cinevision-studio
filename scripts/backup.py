@@ -55,7 +55,7 @@ def create(data: Path, out: Path, key_file: str) -> Path:
         bid = f"backup-{stamp}"
         dek, wrapped = ring.new_wrapped_dek(bid)
         target = out / f"cinevision-{stamp}.cvbak"
-        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o600)
         with os.fdopen(fd, "wb") as f, open(tar_path, "rb") as src_f:
             header = MAGIC + f"{bid}\n{wrapped}\n{tar_path.stat().st_size}\n".encode()
             f.write(len(header).to_bytes(4, "big") + header)

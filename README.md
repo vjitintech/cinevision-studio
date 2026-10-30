@@ -35,7 +35,16 @@ closes after the first account.
 Optional profiles: `--profile scan` (ClamAV) and `--profile llm` (Ollama); uncomment the matching variables in
 `deploy/docker-compose.yml`.
 
-### Without Docker
+### Windows
+* **With Docker Desktop:** in PowerShell, from the repository folder:
+  `python scripts\gen_keys.py deploy\secrets` then `docker compose -f deploy\docker-compose.yml up -d --build`,
+  and open https://localhost:8443 (accept the local certificate warning once).
+* **Without Docker:** install Python 3.12 (`winget install Python.Python.3.12`), Node.js (`winget install OpenJS.NodeJS.LTS`)
+  and FFmpeg (`winget install Gyan.FFmpeg`), open a new PowerShell window, then double-click `scripts\run_windows.cmd`
+  (or run `powershell -ExecutionPolicy Bypass -File scripts\run_local.ps1`) and open http://127.0.0.1:8000.
+  On native Windows the FFmpeg sandbox has a timeout but no memory/CPU limits — prefer Docker for footage you don't trust.
+
+### macOS / Linux without Docker
 Needs Python 3.12+, Node 20+ and `ffmpeg` on your PATH.
 ```bash
 ./scripts/run_local.sh        # creates keys, venv, builds the UI, serves http://127.0.0.1:8000
