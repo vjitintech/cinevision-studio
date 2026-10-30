@@ -194,3 +194,10 @@ details > summary { cursor: pointer; color: var(--muted); padding: 6px 0; }
 details[open] > summary { color: var(--text); }
 .kbd { font: 12px ui-monospace, monospace; background: var(--panel-2); border: 1px solid var(--line); padding: 1px 5px; border-radius: 3px; }
 .empty { padding: 40px 0; text-align: center; color: var(--muted); }
+
+/* footage verdict */
+.verdict { border: 1px solid var(--line); border-left-width: 4px; border-radius: var(--radius-s); padding: 12px 14px; background: var(--panel); }
+.verdict.good { border-left-color: var(--ok); background: #18231b; }
+.verdict.fixes { border-left-color: var(--tungsten); background: #231e16; }
+.verdict.alt { border-left-color: var(--daylight); }
+.verdict summary { color: var(--text); }

@@ -107,6 +107,20 @@ export const AnalysisSection = {
           <Fact label="Spatial relationships" t={a.narrative.spatial_relationships} />
           <Fact label="Apparent purpose" t={a.narrative.apparent_purpose} />
         </div>
+        {a.ai_notes?.notes && (
+          <>
+            <h3>AI scene notes <span className="small faint">{a.ai_notes.model} · {a.ai_notes.frames_sent} frames, on this machine</span></h3>
+            <div className="grid2">
+              <Fact label="What's happening" t={{ ...a.ai_notes.notes, value: a.ai_notes.notes.value.action || "—" }} />
+              <Fact label="Setting" t={{ ...a.ai_notes.notes, note: undefined, value: `${a.ai_notes.notes.value.setting}, ${a.ai_notes.notes.value.time_of_day}` }} />
+              <Fact label="Lighting" t={{ ...a.ai_notes.notes, note: undefined, value: a.ai_notes.notes.value.lighting }} />
+              <Fact label="Mood / genre" t={{ ...a.ai_notes.notes, note: undefined, value: [...a.ai_notes.notes.value.mood, ...a.ai_notes.notes.value.genre_hints].join(", ") }} />
+              <Fact label="Already working" t={{ ...a.ai_notes.notes, note: undefined, value: a.ai_notes.notes.value.strengths }} />
+              <Fact label="Could improve" t={{ ...a.ai_notes.notes, note: undefined, value: a.ai_notes.notes.value.improvements }} />
+            </div>
+          </>
+        )}
+        {a.ai_notes?.status === "failed" && <p className="small muted">The local vision model was configured but didn't respond, so no AI scene notes were added.</p>}
         <div className="notice">
           <strong>Limits of this analysis</strong>
           <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>{a.limitations.map((l: string) => <li key={l} className="small">{l}</li>)}</ul>

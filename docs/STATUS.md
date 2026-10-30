@@ -15,6 +15,7 @@ automated tests (`backend/tests`, `e2e/run_e2e.py`).
 | Ingest | H.264 browser proxy, ~2 fps keyframes (max 120) | |
 | Scene analysis | Shot cuts; camera pan/tilt/zoom/roll/handheld via optical flow; zoom-vs-dolly from parallax; subject motion vs camera motion; palette; exposure/contrast/key; colour cast; composition (thirds, symmetry, negative space, leading lines, vanishing point, roll, depth-of-field cue); indoor/outdoor and time-of-day heuristics; practical-light candidates; people (HOG); pacing/mood/purpose heuristics | Each value labelled observed / estimated / heuristic with a confidence. Verified against synthetic clips with known pan, zoom, static and cut. |
 | Concepts | 8 archetypes scored against brief + footage, diverse selection (MMR), per-shot size/angle/height/direction/lens/DoF/focus/movement/speed/rig/blocking/lighting/grade/transition, production complexity & kit, continuity risks, differences from original, 3D camera paths | Deterministic and explainable; not a language model |
+| Footage verdict | After concepts are generated, compares your original shot-by-shot with each concept (size, angle, movement, lighting key, colour cast) → 0–100 match. Says **"Your footage is good"** when one matches ≥70% with no major technical problems; otherwise flags fixes or presents the concepts as alternatives. Always still lists the other options. Technical checks: blown highlights, crushed blacks, underexposure, slightly crooked horizon, unintended shake | Measures craft, not performance or story |
 | Refinement | Rule-based natural-language commands (all examples from the brief + ~15 more), shot-scoped commands, structured patches, revision history, restore | Unrecognised requests are reported, never guessed |
 | Camera planner | Size/angle/composition/orbit/height/lens/movement/speed/Dutch controls; live framing render; original vs planned compare; plan view; save; apply to concept | |
 | Lighting studio | Draggable lights on a top-down diagram; per-source intensity/CCT/softness/elevation/direction; add/remove roles; haze; face + through-lens previews | Conceptual simulation (Lambert + wrap, no cast shadows) — labelled as such in the UI |
@@ -30,6 +31,7 @@ automated tests (`backend/tests`, `e2e/run_e2e.py`).
 |---|---|---|
 | Face detection (better shot sizing) | `CINEVISION_FACE_MODEL=/path/face_detection_yunet_2023mar.onnx` | Shot size uses body detection or saliency, with lower confidence |
 | Malware scanning | `docker compose --profile scan up` and `CINEVISION_CLAMD_SOCKET` | Upload page and settings say "not configured" |
+| Free local vision model (AI scene notes) | `CINEVISION_OLLAMA_URL` + `CINEVISION_OLLAMA_VISION_MODEL` (e.g. `qwen2.5vl:7b`, `llama3.2-vision`, `gemma3:12b`); with Docker use `deploy/docker-compose.vision.yml` | Adds "what's happening / lighting / mood / already working / could improve" notes from 4 keyframes and nudges concept ranking. Off by default; never identifies people |
 | Local LLM for free-text refinements | `--profile llm`, `CINEVISION_OLLAMA_URL`, `CINEVISION_OLLAMA_MODEL` | Only the built-in rule parser interprets commands |
 | External LLM | `CINEVISION_EXTERNAL_LLM_URL/_MODEL/_KEY` **and** owner consent | Listed as not configured / needs consent; nothing is sent |
 
@@ -42,3 +44,9 @@ automated tests (`backend/tests`, `e2e/run_e2e.py`).
 | Physically based lighting with shadows | Not implemented; the lighting preview is conceptual |
 | PostgreSQL backend for private-server mode | Schema is portable; driver layer not implemented — SQLite is used in both modes |
 | Collaboration / sharing | Deliberately absent (private by design) |
+
+## Why no free cloud video AI (e.g. Gemini free tier)
+Free cloud tiers are the obvious way to get "AI that watches the video" at no cost, but the Gemini API's unpaid
+terms let Google use submitted content to improve its products and let human reviewers read it. That breaks this
+app's promise that footage is never used for training, so it isn't offered. A paid tier with no-training terms
+could be added later as an external adapter behind the existing consent gate.

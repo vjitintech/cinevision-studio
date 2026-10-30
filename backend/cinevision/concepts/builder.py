@@ -69,6 +69,8 @@ def _signals(analysis: dict) -> dict:
 # ---------------------------------------------------------------- scoring & selection
 def score_archetypes(analysis: dict, c: dict) -> list[tuple[str, float, list[str]]]:
     words = _words(c)
+    notes = _v((analysis.get("ai_notes") or {}).get("notes"), {}) or {}
+    ai_words = " ".join(notes.get("mood", []) + notes.get("genre_hints", [])).lower()
     sig = _signals(analysis)
     pres = c.get("preservation", "medium")
     budget_i = BUDGET_ORDER.index(c.get("budget", "low"))
@@ -80,6 +82,10 @@ def score_archetypes(analysis: dict, c: dict) -> list[tuple[str, float, list[str
         if hits:
             s += 1.4 * min(3, len(hits))
             why.append(f"matches your brief ({', '.join(hits[:3])})")
+        ai_hits = [k for k in a["keywords"] if k in ai_words and k not in hits]
+        if ai_hits:
+            s += 0.5 * min(2, len(ai_hits))
+            why.append(f"the vision model read the scene as {', '.join(ai_hits[:2])}")
         s -= 0.6 * abs(a["movement"] - c.get("movement_intensity", 2))
         s -= 0.5 * abs(a["lighting"] - c.get("lighting_complexity", 2))
         t = {"realistic": 0, "balanced": 1, "stylized": 2}

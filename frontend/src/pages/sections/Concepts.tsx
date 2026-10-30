@@ -18,13 +18,51 @@ function ConceptFrame({ c, t = 0.5, shotIndex = 0 }: { c: Concept; t?: number; s
     opts={{ sensor: c.data.sensor, ...lightingOpts(scene, shot) }} label={`${c.data.name}, shot ${shot.index + 1} framing`} />;
 }
 
-function ConceptCard({ c, active, onOpen }: { c: Concept; active: boolean; onOpen: () => void }) {
+interface Match { concept_id: string; name: string; score: number; confidence: string; already_matches: string[]; differs: string[] }
+interface Assessment { verdict: "good" | "good_with_fixes" | "alternatives"; headline: string; detail: string;
+  technical_issues: { severity: string; issue: string; fix: string }[]; best_match: Match | null; matches: Match[]; threshold: number; note: string }
+
+/** Tells the user whether the footage they shot is already good, and how close each concept is to it. */
+function Verdict({ a }: { a: Assessment }) {
+  const ws = useWS();
+  const best = a.best_match;
+  const cls = a.verdict === "good" ? "verdict good" : a.verdict === "good_with_fixes" ? "verdict fixes" : "verdict alt";
+  return (
+    <section className={cls} aria-live="polite">
+      <h3 style={{ margin: 0 }}>{a.headline}</h3>
+      <p className="small" style={{ margin: "4px 0 0" }}>{a.detail}</p>
+      {best && a.verdict !== "alternatives" && best.already_matches.length > 0 && (
+        <details style={{ marginTop: 6 }}>
+          <summary className="small">What already matches “{best.name}” ({best.score}%)</summary>
+          <ul className="small" style={{ margin: "4px 0 0", paddingLeft: 18 }}>{best.already_matches.map((x) => <li key={x}>{x}</li>)}</ul>
+          {best.differs.length > 0 && <><div className="small muted" style={{ marginTop: 4 }}>Small differences:</div>
+            <ul className="small muted" style={{ margin: 0, paddingLeft: 18 }}>{best.differs.map((x) => <li key={x}>{x}</li>)}</ul></>}
+          <button className="ghost" style={{ marginTop: 4 }} onClick={() => ws.setConceptId(best.concept_id)}>Open “{best.name}”</button>
+        </details>
+      )}
+      {a.technical_issues.length > 0 && (
+        <details open={a.verdict === "good_with_fixes"} style={{ marginTop: 6 }}>
+          <summary className="small">Technical fixes ({a.technical_issues.length})</summary>
+          <ul className="small" style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+            {a.technical_issues.map((i) => <li key={i.issue}><strong>{i.issue}</strong> {i.fix}</li>)}
+          </ul>
+        </details>
+      )}
+      <p className="small faint" style={{ margin: "6px 0 0" }}>{a.note}</p>
+    </section>
+  );
+}
+
+function ConceptCard({ c, active, onOpen, match }: { c: Concept; active: boolean; onOpen: () => void; match?: Match; }) {
   const d = c.data;
   const s = d.shots[0];
   return (
     <article className={`concept ${c.is_selected ? "selected" : ""} ${active ? "active" : ""}`}>
       <header>
         <div className="row"><h3 className="grow" style={{ margin: 0 }}>{d.name}</h3>{c.is_selected && <span className="chip warm">Chosen</span>}</div>
+        {match && <div className={`small ${match.score >= 70 ? "" : "muted"}`} title={`Match confidence: ${match.confidence}`}
+          style={match.score >= 70 ? { color: "var(--ok)" } : undefined}>
+          {match.score >= 70 ? `Your footage already matches this — ${match.score}%` : `${match.score}% like your footage`}</div>}
         <div className="small muted">{d.intended_emotion}{c.revision > 1 ? ` · revision ${c.revision}` : ""}</div>
       </header>
       <div className="frame"><ConceptFrame c={c} /></div>
@@ -47,7 +85,13 @@ export const ConceptsSection = {
   Center() {
     const ws = useWS();
     const [compare, setCompare] = useState(false);
+    const [assess, setAssess] = useState<Assessment | null>(null);
     const c = ws.concept;
+    const key = ws.concepts.map((x) => x.id).join(",");
+    useEffect(() => {
+      if (!ws.concepts.length) return;
+      api("GET", `/api/projects/${ws.pid}/assessment`).then(setAssess).catch(() => setAssess(null));
+    }, [key, ws.pid]);
     if (!ws.analysis) return <div className="empty">Concepts need a finished analysis. Watch progress on the right.</div>;
     if (!ws.concepts.length) {
       return (
@@ -64,6 +108,7 @@ export const ConceptsSection = {
         <div className="row"><h2 className="grow" style={{ margin: 0 }}>Cinematography concepts</h2>
           <label className="row small" style={{ margin: 0, color: "var(--text)" }}><input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)} /> Compare with the original</label>
         </div>
+        {assess && <Verdict a={assess} />}
         {compare && origFrame && (
           <div className="grid2">
             <div className="stage"><img src={origFrame.url} alt="Original framing" style={{ width: "100%", display: "block" }} /><span className="tag">Original footage</span></div>
@@ -71,7 +116,8 @@ export const ConceptsSection = {
           </div>
         )}
         <div className="grid2">
-          {ws.concepts.map((x) => <ConceptCard key={x.id} c={x} active={c?.lineage_id === x.lineage_id} onOpen={() => ws.setConceptId(x.id)} />)}
+          {ws.concepts.map((x) => <ConceptCard key={x.id} c={x} active={c?.lineage_id === x.lineage_id} onOpen={() => ws.setConceptId(x.id)}
+            match={assess?.matches.find((m) => m.concept_id === x.id)} />)}
         </div>
         {c && <ConceptDetail />}
       </div>

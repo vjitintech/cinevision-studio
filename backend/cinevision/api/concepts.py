@@ -10,6 +10,7 @@ from starlette.routing import Route
 
 from .. import audit, db, jobs
 from ..adapters import llm, registry
+from ..concepts import assessment as AS
 from ..concepts import refine as R
 from ..concepts import shotlist as SL
 from ..keys import keyring
@@ -394,6 +395,23 @@ async def list_shotlists(request: Request):
                               "data": k.dec_json(r["data_enc"], f"shot_lists:data:{r['id']}")} for r in rows]})
 
 
+async def assessment(request: Request):
+    """Is the uploaded footage already good / already matching one of the current concepts?"""
+    ctx = current(request)
+    pid = request.path_params["pid"]
+    proj = owned_project(ctx, pid)
+    a = load_analysis(ctx, pid)
+    if a is None:
+        raise ApiError(404, "analysis_not_ready", "No analysis yet.")
+    k = keyring()
+    rows = db.all_("SELECT * FROM cinematography_concepts WHERE project_id=? AND owner_id=? AND is_current=1", (pid, ctx.uid))
+    latest = db.one("SELECT batch_id FROM cinematography_concepts WHERE project_id=? AND owner_id=? AND revision=1"
+                    " ORDER BY rowid DESC LIMIT 1", (pid, ctx.uid))
+    concepts = [_concept_out(dict(r)) for r in rows if latest and (r["batch_id"] == latest["batch_id"] or r["is_selected"])]
+    controls = k.dec_json(proj["brief_enc"], f"projects:brief:{pid}") or {}
+    return ok(AS.assess(a["data"], concepts, controls))
+
+
 # ---------------------------------------------------------------- Mode D (AI preview) gate
 async def ai_preview(request: Request):
     ctx = current(request)
@@ -425,4 +443,5 @@ routes = [
     Route("/api/concepts/{cid}/shotlist", create_shotlist, methods=["POST"]),
     Route("/api/concepts/{cid}/shotlists", list_shotlists, methods=["GET"]),
     Route("/api/concepts/{cid}/ai-preview", ai_preview, methods=["POST"]),
+    Route("/api/projects/{pid}/assessment", assessment, methods=["GET"]),
 ]

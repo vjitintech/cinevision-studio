@@ -88,6 +88,21 @@ def list_adapters(uid: str | None = None) -> list[dict]:
                     "data_flow": "Would send concept text only, to a model on this machine.",
                     "note": "Set CINEVISION_OLLAMA_URL and CINEVISION_OLLAMA_MODEL to enable."})
 
+    # Local vision-language model via Ollama (optional, free)
+    vision_local = bool(s.ollama_url) and is_loopback_url(s.ollama_url)
+    if s.ollama_url and s.ollama_vision_model:
+        vstatus = "available" if vision_local or "ollama-vision" in consent else "needs_consent"
+    else:
+        vstatus = "not_configured"
+    out.append({"id": "ollama-vision", "service": "scene_analysis", "service_label": SERVICES["scene_analysis"],
+                "name": f"Ollama vision ({s.ollama_vision_model})" if s.ollama_vision_model else "Ollama vision model (free, local)",
+                "version": "1", "external": bool(s.ollama_url) and not vision_local, "status": vstatus,
+                "data_flow": ("Sends up to 4 downscaled keyframes to the Ollama server on this machine. Nothing leaves it."
+                              if vision_local or not s.ollama_url else
+                              f"Sends up to 4 downscaled keyframes to {urlparse(s.ollama_url).hostname}."),
+                "note": "Adds AI scene notes (setting, action, mood, strengths, improvements) and nudges concept ranking. "
+                        "Set CINEVISION_OLLAMA_URL and CINEVISION_OLLAMA_VISION_MODEL (e.g. qwen2.5vl:7b) to enable."})
+
     out.append({"id": "external-llm", "service": "language", "service_label": SERVICES["language"],
                 "name": "External OpenAI-compatible LLM", "version": "1", "external": True,
                 "status": "not_configured" if not (s.external_llm_url and s.external_llm_model and s.external_llm_key)

@@ -58,6 +58,7 @@ class Settings:
     # External / optional adapters (all disabled unless configured)
     ollama_url: str | None = None
     ollama_model: str | None = None
+    ollama_vision_model: str | None = None
     external_llm_url: str | None = None
     external_llm_model: str | None = None
     external_llm_key: str | None = None
@@ -111,6 +112,7 @@ def load_settings() -> Settings:
         clamd_socket=_env("CINEVISION_CLAMD_SOCKET"),
         ollama_url=_env("CINEVISION_OLLAMA_URL"),
         ollama_model=_env("CINEVISION_OLLAMA_MODEL"),
+        ollama_vision_model=_env("CINEVISION_OLLAMA_VISION_MODEL"),
         external_llm_url=_env("CINEVISION_EXTERNAL_LLM_URL"),
         external_llm_model=_env("CINEVISION_EXTERNAL_LLM_MODEL"),
         external_llm_key=_env("CINEVISION_EXTERNAL_LLM_KEY"),

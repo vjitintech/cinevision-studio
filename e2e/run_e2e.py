@@ -100,6 +100,8 @@ def main():
             page.get_by_role("link", name="Cinematography concepts").click()
             page.get_by_role("button", name="Generate 4 concepts").click()
             expect(page.locator("article.concept")).to_have_count(4, timeout=60000)
+            expect(page.locator("section.verdict")).to_be_visible()
+            print("verdict:", page.locator("section.verdict h3").inner_text())
             time.sleep(0.8)
             page.screenshot(path=shots / "04-concepts.png")
             page.get_by_label("Compare with the original").check()

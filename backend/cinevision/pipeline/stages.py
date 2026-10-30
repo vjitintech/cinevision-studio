@@ -105,7 +105,17 @@ def analyze(ctx: jobs.JobContext, params: dict) -> str:
             img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
             if img is not None:
                 keyframes.append((f["t_s"], img))
-        result = engine.run(str(proxy), keyframes, meta, lambda p, stage: ctx.progress(p * 0.97, stage))
+        result = engine.run(str(proxy), keyframes, meta, lambda p, stage: ctx.progress(p * 0.9, stage))
+        from ..adapters import vision
+        if vision.available(owner) and keyframes:
+            ctx.progress(0.92, "Asking the local vision model to describe the scene")
+            try:
+                reps = [img for t, img in keyframes if any(abs(t - sh["representative_t"]) < 0.6 for sh in result["shots"])] \
+                    or [img for _, img in keyframes]
+                result["ai_notes"] = vision.describe(owner, reps)
+                result["engine"] = {**result["engine"], "vision_model": result["ai_notes"]["model"]}
+            except Exception as e:  # never fabricate: record that it failed and carry on
+                result["ai_notes"] = {"status": "failed", "error": type(e).__name__}
     ctx.check_cancel()
     shots = result["shots"]
     aid = db.new_id()

@@ -46,6 +46,7 @@ Needs Python 3.12+, Node 20+ and `ffmpeg` on your PATH.
 | `CINEVISION_FACE_MODEL` | – | YuNet ONNX file for face-based shot sizing |
 | `CINEVISION_CLAMD_SOCKET` | – | ClamAV socket for malware scanning |
 | `CINEVISION_OLLAMA_URL`, `_MODEL` | – | local LLM for free-text refinements |
+| `CINEVISION_OLLAMA_VISION_MODEL` | – | free local vision model for AI scene notes (e.g. `qwen2.5vl:7b`) |
 | `CINEVISION_EXTERNAL_LLM_URL`, `_MODEL`, `_KEY` | – | external LLM (also needs owner consent) |
 
 ## Using it
@@ -54,6 +55,8 @@ Needs Python 3.12+, Node 20+ and `ffmpeg` on your PATH.
    measured, dashed are estimated, dotted are interpretations.
 3. **Cinematography concepts** → generate 2–6 distinct approaches; compare with the original; refine in plain
    language ("make the lighting more dramatic", "shot 2 tighter", "small budget"); every change is a new revision.
+   A banner tells you whether your footage is **already good** — if it matches one of the concepts closely and has no
+   technical problems — and each concept shows how close it is to what you shot.
 4. **Camera planner / Lighting studio / Storyboard & animatic / 3D previsualisation** → shape the chosen concept.
 5. **Shot list** → snapshot and download as PDF, CSV or JSON.
 
