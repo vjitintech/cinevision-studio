@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
+    "build:pages": "node build.mjs --edition=browser",
     "watch": "node build.mjs --watch",
     "typecheck": "tsc --noEmit"
   },

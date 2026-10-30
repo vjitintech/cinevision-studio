@@ -33,7 +33,7 @@ function Verdict({ a }: { a: Assessment }) {
       <p className="small" style={{ margin: "4px 0 0" }}>{a.detail}</p>
       {best && a.verdict !== "alternatives" && best.already_matches.length > 0 && (
         <details style={{ marginTop: 6 }}>
-          <summary className="small">What already matches “{best.name}” ({best.score}%)</summary>
+          <summary className="small">What already matches “{best.name}” ({best.score}%, {best.confidence} confidence — based on {best.already_matches.length + best.differs.length} measurements)</summary>
           <ul className="small" style={{ margin: "4px 0 0", paddingLeft: 18 }}>{best.already_matches.map((x) => <li key={x}>{x}</li>)}</ul>
           {best.differs.length > 0 && <><div className="small muted" style={{ marginTop: 4 }}>Small differences:</div>
             <ul className="small muted" style={{ margin: 0, paddingLeft: 18 }}>{best.differs.map((x) => <li key={x}>{x}</li>)}</ul></>}

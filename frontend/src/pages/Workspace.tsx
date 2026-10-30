@@ -201,7 +201,7 @@ function LeftPanel() {
   const [vt, setVt] = useState(0);
   return (
     <div>
-      <div className="panel-h">Original clip {v && <span className="faint small">{v.metadata ? `${v.metadata.width}×${v.metadata.height} · ${v.metadata.fps} fps` : ""}</span>}</div>
+      <div className="panel-h">Original clip {v && <span className="faint small">{v.metadata ? `${v.metadata.width}×${v.metadata.height}${v.metadata.fps ? ` · ${v.metadata.fps} fps` : ""}` : ""}</span>}</div>
       {v?.proxy_blob_id && ws.proxyUrl ? (
         <video ref={vref} className="clip" src={ws.proxyUrl} controls preload="metadata" playsInline onTimeUpdate={(e) => setVt(e.currentTarget.currentTime)} />
       ) : v ? <div className="reel-thumb" style={{ width: "100%" }}>{v.status === "failed" ? "Processing failed" : "Preparing preview…"}</div>

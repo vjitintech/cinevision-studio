@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, ApiError, uploadClip } from "../api";
+import { api, ApiError, BROWSER, uploadClip } from "../api";
 import { navigate } from "../router";
 import type { Controls } from "../types";
 import { ControlsForm, DEFAULT_CONTROLS } from "../components/ControlsForm";
@@ -30,13 +30,14 @@ export function UploadBox({ pid, onUploaded }: { pid: string; onUploaded: () => 
           <p><strong>Drop a clip here</strong> or <button type="button" onClick={() => input.current?.click()}>choose a file</button></p>
           <p className="small muted">
             {limits ? `MP4, MOV, MKV, WEBM or AVI · up to ${limits.max_upload_mb} MB and ${Math.round(limits.max_duration_s / 60)} minutes.` : "Short clips work best."}
-            {" "}The file is checked, encrypted on arrival, and processed on this {""}server only.
+            {BROWSER ? " The file stays on this device — it's analysed inside your browser and never uploaded anywhere."
+              : " The file is checked, encrypted on arrival, and processed on this server only."}
           </p>
           <input ref={input} type="file" hidden accept=".mp4,.mov,.m4v,.mkv,.webm,.avi,video/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) send(f); }} />
         </>
       ) : (
         <div>
-          <p>Uploading… {Math.round(progress * 100)}%</p>
+          <p>{BROWSER ? "Checking the clip…" : `Uploading… ${Math.round(progress * 100)}%`}</p>
           <div className="bar" style={{ maxWidth: 320, margin: "0 auto" }}><b style={{ width: `${progress * 100}%` }} /></div>
           {progress > 0.99 && <p className="small muted" style={{ marginTop: 8 }}>Validating and encrypting…</p>}
         </div>

@@ -1,4 +1,6 @@
 // Same-origin API client. Sends the per-session CSRF token on every state-changing request.
+// In the browser edition (GitHub Pages) the same calls are answered in-page by ./local/server — nothing goes over the network.
+export const BROWSER = __EDITION__ === "browser";
 
 let csrf: string | null = null;
 export const setCsrf = (t: string | null) => { csrf = t; };
@@ -13,6 +15,11 @@ let onUnauthenticated: (() => void) | null = null;
 export const setUnauthenticatedHandler = (fn: () => void) => { onUnauthenticated = fn; };
 
 export async function api<T = any>(method: Method, path: string, body?: unknown, opts: { raw?: BodyInit; signal?: AbortSignal } = {}): Promise<T> {
+  if (BROWSER) {
+    const local = await import("./local/server");
+    const res = await local.handle(method, path, body);
+    return (res === undefined ? undefined : JSON.parse(JSON.stringify(res))) as T;
+  }
   const headers: Record<string, string> = {};
   if (method !== "GET" && csrf) headers["X-CSRF-Token"] = csrf;
   let payload: BodyInit | undefined = opts.raw;
@@ -32,6 +39,7 @@ export async function api<T = any>(method: Method, path: string, body?: unknown,
 
 /** Upload with progress (fetch has no upload progress). */
 export function uploadClip(pid: string, file: File, onProgress: (f: number) => void): Promise<any> {
+  if (BROWSER) return import("./local/server").then((l) => l.upload(pid, file, onProgress));
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `/api/projects/${pid}/video`);
@@ -51,6 +59,7 @@ export function uploadClip(pid: string, file: File, onProgress: (f: number) => v
 }
 
 export async function download(path: string, body: unknown, fallbackName: string) {
+  if (BROWSER) { const l = await import("./local/server"); return l.download(path, body, fallbackName); }
   const res = await fetch(path, { method: "POST", credentials: "same-origin",
     headers: { "Content-Type": "application/json", ...(csrf ? { "X-CSRF-Token": csrf } : {}) }, body: JSON.stringify(body) });
   if (!res.ok) {

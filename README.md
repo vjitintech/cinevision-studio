@@ -9,7 +9,20 @@ without per-provider consent, and never used for training.
 
 ![Concepts](docs/screenshots/concepts.png)
 
-## Quick start
+## Try it in your browser (no install)
+
+**https://vjitintech.github.io/cinevision-studio/**
+
+The browser edition runs entirely inside your browser tab: your clip is decoded and analysed on your device and
+stored only in that browser (IndexedDB). The page's Content-Security-Policy (`connect-src 'none'`) stops it from
+sending anything to any server. Use Chrome, Edge or Safari for MP4 (H.264); Firefox plays WebM most reliably.
+
+Compared with the self-hosted edition it has no accounts or encryption at rest, doesn't detect people/faces, doesn't
+measure camera tilt or lens perspective, and has no optional AI models. Everything else — concepts, refinement,
+"your footage is good" verdict, camera planner, lighting studio, storyboard/animatic, 3D previs, shot list
+(CSV/JSON/print-to-PDF) — works the same. It's rebuilt and republished by `.github/workflows/pages.yml` on every push.
+
+## Self-hosted edition — quick start
 
 ### Docker (recommended)
 ```bash
@@ -74,6 +87,7 @@ With Docker, the data lives in the `cinevision_cinevision-data` volume; stop the
 
 ## Tests
 ```bash
+cd frontend && npm run build:pages && cd .. && python e2e/run_pages_e2e.py   # browser edition, checks no network calls
 cd backend && pip install -r requirements-dev.txt && pytest -q     # 50+ integration tests against a real server
 cd frontend && npm install && npm run build
 python e2e/run_e2e.py --shots /tmp/shots                           # full flow in headless Chromium

@@ -50,3 +50,11 @@ Free cloud tiers are the obvious way to get "AI that watches the video" at no co
 terms let Google use submitted content to improve its products and let human reviewers read it. That breaks this
 app's promise that footage is never used for training, so it isn't offered. A paid tier with no-training terms
 could be added later as an external adapter behind the existing consent gate.
+
+## Browser edition (GitHub Pages)
+Same UI and the same concept engine (TypeScript port; tables generated from the Python source by
+`scripts/gen_engine_data.py`). Analysis is a TypeScript port: shot cuts, camera pan/tilt/zoom/roll/handheld via
+tracked points + RANSAC, colour/tone, saliency composition, horizon roll, depth-of-field cue, environment and mood.
+**Not in the browser edition:** people/face detection (shot size falls back to a labelled guess), camera tilt,
+leading lines, lens perspective, frame-rate readout, accounts, encryption at rest, malware scanning, optional AI
+models. PDF export uses the browser's print dialog ("Save as PDF").

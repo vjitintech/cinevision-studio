@@ -79,7 +79,7 @@ def match(concept: dict, analysis: dict) -> dict:
         n = s["index"] + 1
         # shot size (weight 3)
         osz = G.normalise_size(_v(o.get("shot_size")))
-        size_known = _v(o.get("shot_size")) not in (None, "undetermined")
+        size_known = _v(o.get("shot_size")) not in (None, "undetermined") and (o.get("shot_size") or {}).get("basis") != "heuristic"
         if size_known:
             d = abs(G.SHOT_SIZES.index(osz) - G.SHOT_SIZES.index(s["size"]))
             pts += 3 * (1 if d == 0 else 0.5 if d == 1 else 0)

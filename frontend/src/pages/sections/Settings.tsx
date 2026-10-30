@@ -51,7 +51,7 @@ export const SettingsSection = {
         <div className="panel-h">Clip</div>
         {ws.project.video ? (
           <>
-            <p className="small muted">{ws.project.video.filename} · malware scan: {ws.project.video.scan_status.replace("_", " ")}</p>
+            <p className="small muted">{ws.project.video.filename}{ws.project.video.scan_status.includes("browser") ? "" : ` · malware scan: ${ws.project.video.scan_status.replace(/_/g, " ")}`}</p>
             <button className="danger" disabled={busy} onClick={removeClip}>Remove clip to replace it</button>
           </>
         ) : <p className="small muted">No clip uploaded.</p>}

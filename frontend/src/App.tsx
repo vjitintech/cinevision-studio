@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, setCsrf, setUnauthenticatedHandler } from "./api";
-import { linkTo, navigate, usePath } from "./router";
+import { linkTo, navigate, useRoute } from "./router";
 import { AuthPage } from "./pages/Auth";
 import { Dashboard } from "./pages/Dashboard";
 import { NewProject } from "./pages/NewProject";
 import { Workspace } from "./pages/Workspace";
 import { SecurityPage } from "./pages/Security";
+import { BrowserPrivacyPage } from "./pages/BrowserPrivacy";
 
 export interface Session {
   authenticated: boolean; mfa_required: boolean; registration_open: boolean; mode: string;
@@ -14,7 +15,7 @@ export interface Session {
 
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
-  const path = usePath();
+  const [path, navCount] = useRoute();
 
   const refresh = useCallback(async () => {
     const s = await api<Session>("GET", "/api/auth/session");
@@ -32,8 +33,8 @@ export function App() {
   const m = path.match(/^\/p\/([0-9a-f-]{36})(?:\/([a-z0-9-]+))?/);
   let page: React.ReactNode;
   if (m) page = <Workspace pid={m[1]} section={m[2] || "analysis"} />;
-  else if (path === "/new") page = <NewProject />;
-  else if (path === "/security") page = <SecurityPage session={session} onChange={refresh} />;
+  else if (path === "/new") page = <NewProject key={navCount} />;
+  else if (path === "/security") page = session.mode === "browser" ? <BrowserPrivacyPage /> : <SecurityPage session={session} onChange={refresh} />;
   else page = <Dashboard />;
 
   return (
@@ -46,10 +47,16 @@ export function App() {
           <a {...linkTo("/security")} aria-current={path === "/security" ? "page" : undefined}>Security & privacy</a>
         </nav>
         <div className="grow" />
-        <span className="small muted" title={session.mode === "local" ? "Everything runs on this machine" : "Private server"}>
-          {session.mode === "local" ? "Local mode" : "Private server"} · {session.user?.email}
-        </span>
-        <button className="ghost" onClick={logout}>Sign out</button>
+        {session.mode === "browser" ? (
+          <span className="small muted" title="Everything runs inside this browser tab and is stored only on this device">Browser edition · stays on this device</span>
+        ) : (
+          <>
+            <span className="small muted" title={session.mode === "local" ? "Everything runs on this machine" : "Private server"}>
+              {session.mode === "local" ? "Local mode" : "Private server"} · {session.user?.email}
+            </span>
+            <button className="ghost" onClick={logout}>Sign out</button>
+          </>
+        )}
       </header>
       <main className="main">{page}</main>
     </div>

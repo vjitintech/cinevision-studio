@@ -9,3 +9,4 @@ deploy/secrets/
 *.db-wal
 *.db-shm
 .env
+frontend/dist-pages/

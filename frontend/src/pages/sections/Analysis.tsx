@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api } from "../../api";
+import { api, BROWSER } from "../../api";
 import { Fact, Legend, Swatches } from "../../components/common";
 import { fmtTime } from "../../previs/math";
 import { linkTo } from "../../router";
@@ -40,7 +40,7 @@ export const AnalysisSection = {
         <p className="muted small">Each value shows how it was obtained. Solid outlines were measured; dashed ones were estimated by a model; dotted ones are interpretations to check against your intent.</p>
         <div className="grid3">
           <Fact label="Duration" t={a.clip.duration_s} render={(v) => `${v.toFixed(2)} s`} />
-          <Fact label="Resolution & rate" t={{ ...a.clip.resolution, value: `${a.clip.resolution.value} · ${a.clip.fps.value} fps` }} />
+          <Fact label="Resolution & rate" t={{ ...a.clip.resolution, value: typeof a.clip.fps.value === "number" ? `${a.clip.resolution.value} · ${a.clip.fps.value} fps` : `${a.clip.resolution.value} (frame rate not readable in a browser)` }} />
           <Fact label="Shots detected" t={{ ...a.continuity, value: a.continuity.value.shot_count }} />
         </div>
 
@@ -138,7 +138,8 @@ export const AnalysisSection = {
         {ws.analysis && <p className="small muted">Engine {ws.analysis.engine?.id} v{ws.analysis.engine?.version} · {new Date(ws.analysis.created_at).toLocaleString()}</p>}
         <button disabled={busy || !!ws.activeJobs.length || ws.project.video?.status !== "ready"} onClick={rerun}>Run analysis again</button>
         {ws.analysis && <a {...linkTo(`/p/${ws.pid}/concepts`)}>Next: generate concepts</a>}
-        <p className="small faint">Analysis runs entirely on this server with OpenCV and FFmpeg. No frames are sent anywhere.</p>
+        <p className="small faint">{BROWSER ? "Analysis runs inside this browser tab. No frames are sent anywhere."
+          : "Analysis runs entirely on this server with OpenCV and FFmpeg. No frames are sent anywhere."}</p>
       </div>
     );
   },
