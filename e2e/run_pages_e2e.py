@@ -40,11 +40,12 @@ def serve(root: Path) -> tuple[http.server.ThreadingHTTPServer, int]:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--shots", default=None)
+    ap.add_argument("--site", default=str(ROOT / "frontend" / "dist-pages"), help="built site folder (e.g. a checkout of gh-pages)")
     args = ap.parse_args()
     shots = Path(args.shots or tempfile.mkdtemp(prefix="cv-pages-"))
     shots.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="cv-pages-site-"))
-    (work / "cinevision-studio").symlink_to(ROOT / "frontend" / "dist-pages")
+    (work / "cinevision-studio").symlink_to(Path(args.site).resolve())
     clips = Path(tempfile.mkdtemp(prefix="cv-pages-clips-"))
     pan = make_clip(clips / "pan.webm", pattern="pan", codec="libvpx-vp9", duration=4, extra=["-b:v", "1M"])
     cut = make_clip(clips / "cut.webm", pattern="cut", codec="libvpx-vp9", duration=6, extra=["-b:v", "1M"])
