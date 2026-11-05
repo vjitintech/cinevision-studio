@@ -52,9 +52,13 @@ def run_one(wid: str) -> bool:
         jobs.mark_cancelled(job["id"])
     except UserFacingError as e:
         jobs.fail(job, str(e), e.retryable)
-    except Exception:
+    except Exception as e:
         log.exception("job %s (%s) crashed", job["id"], job["kind"])
-        jobs.fail(job, "Processing failed unexpectedly. It will be retried automatically.", retryable=True)
+        last = job["attempts"] >= job["max_attempts"]
+        # only the exception type is shown (never its text, which could contain paths or data)
+        jobs.fail(job, f"Processing failed unexpectedly ({type(e).__name__}). " +
+                  ("Use Retry, and if it fails again, copy the error lines from the window running CineVision."
+                   if last else "It will be retried automatically."), retryable=True)
     return True
 
 

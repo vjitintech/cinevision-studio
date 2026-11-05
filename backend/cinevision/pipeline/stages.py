@@ -46,9 +46,19 @@ def ingest(ctx: jobs.JobContext, params: dict) -> str:
         src = storage.decrypt_to_file(orig, tmp / "source.bin")
         ctx.progress(0.15, "Creating browser preview (H.264)")
         proxy = tmp / "proxy.mp4"
-        _ffmpeg(["-i", f"file:{src}", "-map", "0:v:0", "-map", "0:a:0?", "-vf", "scale='min(1280,iw)':-2:flags=bicubic,format=yuv420p",
-                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
-                 "-t", str(settings().max_duration_s), "-map_metadata", "-1", f"file:{proxy}"], settings().ffmpeg_timeout_s)
+        # even dimensions are required by H.264 4:2:0, so odd sizes (e.g. 1081 px) are rounded down
+        vf = "scale='trunc(min(1280,iw)/2)*2':-2:flags=bicubic,format=yuv420p"
+        common = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-movflags", "+faststart",
+                  "-t", str(settings().max_duration_s), "-map_metadata", "-1"]
+        try:
+            _ffmpeg(["-i", f"file:{src}", "-map", "0:v:0", "-map", "0:a:0?", "-vf", vf, *common,
+                     "-c:a", "aac", "-b:a", "128k", f"file:{proxy}"], settings().ffmpeg_timeout_s)
+        except UserFacingError:
+            # unusual audio (or a damaged audio track) shouldn't block the picture: retry without sound,
+            # and tolerate decode errors in damaged files
+            proxy.unlink(missing_ok=True)
+            _ffmpeg(["-err_detect", "ignore_err", "-i", f"file:{src}", "-map", "0:v:0", "-an", "-vf", vf, *common,
+                     f"file:{proxy}"], settings().ffmpeg_timeout_s)
         ctx.progress(0.6, "Extracting keyframes")
         dur = float(meta["duration_s"])
         fps = min(2.0, MAX_KEYFRAMES / max(dur, 0.5))
@@ -66,7 +76,10 @@ def ingest(ctx: jobs.JobContext, params: dict) -> str:
         proxy_id = storage.put_file(proxy, owner_id=owner, project_id=v["project_id"], kind="proxy", content_type="video/mp4")
         frame_rows = []
         for i, f in enumerate(files):
-            img = cv2.imread(str(f))
+            # np.fromfile + imdecode works with any path (cv2.imread fails on non-ASCII Windows paths)
+            img = cv2.imdecode(np.fromfile(str(f), np.uint8), cv2.IMREAD_COLOR)
+            if img is None:
+                continue
             bid = storage.put_file(f, owner_id=owner, project_id=v["project_id"], kind="frame", content_type="image/jpeg")
             frame_rows.append((db.new_id(), owner, v["project_id"], v["id"], bid, i, round(min(dur, i / fps), 3),
                                img.shape[1], img.shape[0]))
