@@ -1,8 +1,14 @@
 # CineVision Studio
 
-A private previsualisation studio for directors and cinematographers. Upload a short clip of a scene and get
-several genuinely different ways to shoot it — camera, lens, movement, blocking, lighting and grade — with a
-camera planner, lighting studio, storyboard animatic, 3D proxy previs and an exportable shot list.
+A private AI director's assistant. Upload any video — a phone test, a short film, a full feature — and, without
+filling anything in, get a **Director's review**: is it good, and what to change in camera, framing, lighting,
+colour, sound, editing and titles, with the *why* behind each note, ways to edit it, and alternative ways to shoot
+it shown as animated 3D animatics. Upload hundreds of clips with a story and **Movie assembly** puts them in story
+order like an editor and sets aside the ones that don't fit. **Learn directing** turns the same reasoning into
+lessons based on your own footage. Everything works in 16 languages, runs on your own machine, and can use a free
+local AI (colibri, Ollama) for deeper notes. An **MCP server** lets AI assistants use CineVision as a tool.
+
+Also included: camera planner, lighting studio, storyboard animatic, 3D proxy previs and exportable shot lists.
 
 Everything runs on your own machine by default. Footage is encrypted at rest, never sent to third parties
 without per-provider consent, and never used for training.
@@ -50,6 +56,22 @@ Needs Python 3.12+, Node 20+ and `ffmpeg` on your PATH.
 ./scripts/run_local.sh        # creates keys, venv, builds the UI, serves http://127.0.0.1:8000
 ```
 
+## Free local AI (optional)
+
+CineVision works without AI. For notes on story, performance and style, and an AI editor's order for movie
+assembly, run a free model on your own computer and connect it under **AI & language**:
+
+* **colibri** (github.com/JustVugg/colibri): run `START-HERE.bat`, then
+  `py -3 c\coli start --port 8800 --background --no-browser` (CineVision uses port 8000).
+* **Ollama**: `ollama pull qwen2.5vl:7b`, address `http://127.0.0.1:11434/v1`.
+
+The page checks your RAM/GPU and recommends models. Frames only go to a server on this computer.
+
+## AI assistants (MCP)
+
+See [docs/MCP.md](docs/MCP.md) — six tools: review_video, get_review, list_projects, list_concepts,
+refine_concept, assemble_movie.
+
 ## Configuration
 
 | Variable | Default | Purpose |
@@ -61,9 +83,10 @@ Needs Python 3.12+, Node 20+ and `ffmpeg` on your PATH.
 | `CINEVISION_EXTRA_ORIGINS` | – | comma-separated additional allowed origins |
 | `CINEVISION_COOKIE_SECURE` | `true` | set `false` only for plain-http on 127.0.0.1 |
 | `CINEVISION_TRUST_PROXY` | `false` | honour `X-Forwarded-For` (only behind the bundled Caddy) |
-| `CINEVISION_ALLOW_REGISTRATION` | `false` | allow more accounts after the owner |
-| `CINEVISION_MAX_UPLOAD_MB` | `500` | upload size cap |
-| `CINEVISION_MAX_DURATION_S` | `300` | clip length cap |
+| `CINEVISION_ALLOW_REGISTRATION` | `true` | open sign-up; `false` closes it after the owner account |
+| `CINEVISION_MAX_UPLOAD_MB` | `8192` | upload size cap |
+| `CINEVISION_MAX_DURATION_S` | `14400` | video length cap (4 hours) |
+| `CINEVISION_LOCAL_AI_URL`, `_MODEL`, `_VISION_MODEL` | – | preset for the local AI server (also settable in the app) |
 | `CINEVISION_EMBEDDED_WORKER` | `false` | run the worker inside the API process (single-process setups) |
 | `CINEVISION_FACE_MODEL` | – | YuNet ONNX file for face-based shot sizing |
 | `CINEVISION_CLAMD_SOCKET` | – | ClamAV socket for malware scanning |
@@ -72,7 +95,8 @@ Needs Python 3.12+, Node 20+ and `ffmpeg` on your PATH.
 | `CINEVISION_EXTERNAL_LLM_URL`, `_MODEL`, `_KEY` | – | external LLM (also needs owner consent) |
 
 ## Using it
-1. **New project** → name it, optionally set the director's brief, upload a clip.
+1. **New project** → name it and upload a video. That's all — the analysis, concepts and Director's review follow
+   automatically. **Movie assembly** takes many clips plus an optional story. **Learn directing** has the lessons.
 2. **Video analysis** → shots, camera movement, composition, light, colour, environment and mood. Solid outlines are
    measured, dashed are estimated, dotted are interpretations.
 3. **Cinematography concepts** → generate 2–6 distinct approaches; compare with the original; refine in plain

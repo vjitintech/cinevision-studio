@@ -153,3 +153,19 @@ CUES = {'indoor': 'interior',
  'warm': 'cálido',
  'titles': 'títulos',
  'credits': 'créditos'}
+
+EXERCISES = {'story': 'Escribe una frase: ¿qué debe sentir el público al final de esta escena? Ruédala, mírala sin sonido y comprueba si ese '
+          'sentimiento llega.',
+ 'camera': 'Rueda el mismo momento de 10 segundos de tres formas: fija, acercamiento lento y cámara en mano. Míralas seguidas y anota qué '
+           'te hace sentir cada una.',
+ 'composition': 'Encuadra a una persona tres veces: en el centro, en el tercio izquierdo mirando a la derecha, en el tercio derecho '
+                'mirando a la derecha. ¿Cuál incomoda y por qué?',
+ 'lighting': 'Ilumina una cara con una sola lámpara. Muévela de frente, de lado y por detrás. Haz una foto de cada posición y compara la '
+             'atmósfera.',
+ 'colour': 'Elige dos colores para tu escena (uno para el personaje, otro para el mundo). Ponlos en vestuario y decorado y compruébalos en '
+           'la paleta de la revisión.',
+ 'sound': "Graba 30 segundos de 'silencio' en tu localización (ambiente de sala). Ponlo bajo un corte y escucha cómo desaparecen los "
+          'huecos muertos.',
+ 'editing': 'Monta los mismos tres planos en dos órdenes y dos duraciones (rápido y lento). Enséñaselos a alguien y pregunta de qué '
+            'trataba cada versión.',
+ 'titles': 'Haz un cartón de título y cronometra cuánto tardas en leerlo dos veces. Mantenlo en pantalla al menos ese tiempo.'}

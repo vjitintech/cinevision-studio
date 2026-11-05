@@ -242,3 +242,18 @@ details[open] > summary { color: var(--text); }
 .assembly textarea { width: 100%; }
 .assembly h2 { margin-top: 28px; }
 .assembly .dropzone { margin-top: 12px; }
+
+/* animated 3D previews */
+.anim-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.anim-card { margin: 0; padding: 10px; }
+.anim-card figcaption { margin-top: 6px; }
+.concept-anim canvas { width: 100%; display: block; border-radius: 4px; background: #0d0f13; }
+.concept-anim .bar { margin-top: 4px; height: 3px; }
+
+/* Learn directing */
+.chapter { padding: 12px 14px; }
+.chapter-h { display: flex; gap: 10px; align-items: center; width: 100%; text-align: start; border: 0; background: none; padding: 0; cursor: pointer; }
+.lesson { border-top: 1px solid var(--line); padding: 8px 0; }
+.lesson.practise { border-inline-start: 3px solid var(--tungsten); padding-inline-start: 8px; }
+.exercise { background: #1a222c; padding: 8px 10px; border-radius: var(--radius-s); }
+.chapter-h h2 { color: var(--text); }

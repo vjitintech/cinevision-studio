@@ -9,6 +9,7 @@ import { SecurityPage } from "./pages/Security";
 import { BrowserPrivacyPage } from "./pages/BrowserPrivacy";
 import { AISettingsPage } from "./pages/AISettings";
 import { AssemblyPage, NewAssembly } from "./pages/Assembly";
+import { LearnPage } from "./pages/Learn";
 import { LangContext, LANGS, makeT } from "./i18n";
 
 export interface Session {
@@ -63,6 +64,7 @@ export function App() {
   if (m) page = <Workspace pid={m[1]} section={m[2] || "review"} />;
   else if (path === "/new") page = <NewProject key={navCount} />;
   else if (path === "/settings") page = <AISettingsPage />;
+  else if (path === "/learn") page = <LearnPage />;
   else if (path === "/assembly/new") page = <NewAssembly key={navCount} />;
   else if (/^\/a\/[0-9a-f-]{36}$/.test(path)) page = <AssemblyPage key={path} aid={path.slice(3)} />;
   else if (path === "/security") page = session.mode === "browser" ? <BrowserPrivacyPage /> : <SecurityPage session={session} onChange={refresh} />;
@@ -77,6 +79,7 @@ export function App() {
           <a {...linkTo("/")} aria-current={path === "/" ? "page" : undefined}>{t("nav_dashboard")}</a>
           <a {...linkTo("/new")} aria-current={path === "/new" ? "page" : undefined}>{t("nav_new")}</a>
           {session.mode !== "browser" && <a {...linkTo("/assembly/new")} aria-current={path.startsWith("/a") ? "page" : undefined}>{t("nav_assembly")}</a>}
+          {session.mode !== "browser" && <a {...linkTo("/learn")} aria-current={path === "/learn" ? "page" : undefined}>{t("nav_learn")}</a>}
           <a {...linkTo("/settings")} aria-current={path === "/settings" ? "page" : undefined}>{t("nav_settings")}</a>
           <a {...linkTo("/security")} aria-current={path === "/security" ? "page" : undefined}>{t("nav_security")}</a>
         </nav>

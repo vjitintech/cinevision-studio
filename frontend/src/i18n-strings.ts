@@ -40,6 +40,10 @@ const EN = {
     asm_ai_off: "Local AI can also read any-language descriptions and judge story.", asm_beats: "Your description, split into {n} parts",
     asm_delete: "Delete assembly", asm_delete_confirm: "Click again to delete everything", asm_full_only: "Movie assembly runs in the full (self-hosted) edition.",
     job_assemble: "Ordering the movie", dash_new_assembly: "New movie assembly", dash_assembly: "Movie assembly · {n} clips",
+    anim_intro: "Each alternative plays as a 3D animatic: the camera moves along its planned path and the actors act out the blocking.",
+    learn_title: "Learn directing", learn_intro: "Short lessons on each craft — what to watch for, why it matters, and what to do. Every lesson is the same reasoning the Director's review uses on your videos, so you learn from your own footage.",
+    learn_focus: "Practise next (from your videos):", learn_none: "Upload a video to see which lessons matter most for your work.",
+    learn_exercise: "Exercise:", learn_symptom: "You'll notice", learn_why: "Why it matters:", learn_do: "What to do:", learn_seen: "seen {n}× in your videos",
     how_to_install: "How to install colibri (free)", only_owner: "Only the first account (the owner) can change AI settings.",
   };
 

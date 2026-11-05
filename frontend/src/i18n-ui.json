@@ -104,7 +104,17 @@
 "asm_full_only": "फ़िल्म जोड़ना पूरे (सेल्फ़-होस्टेड) संस्करण में चलता है।",
 "job_assemble": "फ़िल्म का क्रम बन रहा है",
 "dash_new_assembly": "नई फ़िल्म असेंबली",
-"dash_assembly": "फ़िल्म असेंबली · {n} क्लिप"
+"dash_assembly": "फ़िल्म असेंबली · {n} क्लिप",
+"anim_intro": "हर विकल्प 3D एनिमैटिक की तरह चलता है: कैमरा अपनी योजनाबद्ध राह पर चलता है और कलाकार ब्लॉकिंग निभाते हैं।",
+"learn_title": "निर्देशन सीखें",
+"learn_intro": "हर कला पर छोटे पाठ — किस पर ध्यान दें, क्यों ज़रूरी है, और क्या करें। हर पाठ वही तर्क है जो निर्देशक की समीक्षा आपके वीडियो पर लगाती है, इसलिए आप अपनी ही फ़ुटेज से सीखते हैं।",
+"learn_focus": "आगे यह अभ्यास करें (आपके वीडियो से):",
+"learn_none": "कौन-से पाठ आपके काम के लिए सबसे ज़रूरी हैं, यह देखने के लिए वीडियो अपलोड करें।",
+"learn_exercise": "अभ्यास:",
+"learn_symptom": "आप देखेंगे",
+"learn_why": "क्यों ज़रूरी है:",
+"learn_do": "क्या करें:",
+"learn_seen": "आपके वीडियो में {n}× दिखा"
 },
 "te": {
 "nav_dashboard": "ప్రైవేట్ డాష్‌బోర్డ్",
@@ -211,7 +221,17 @@
 "asm_full_only": "సినిమా అసెంబ్లీ పూర్తి (సెల్ఫ్-హోస్టెడ్) ఎడిషన్‌లో పని చేస్తుంది.",
 "job_assemble": "సినిమా క్రమం తయారవుతోంది",
 "dash_new_assembly": "కొత్త సినిమా అసెంబ్లీ",
-"dash_assembly": "సినిమా అసెంబ్లీ · {n} క్లిప్‌లు"
+"dash_assembly": "సినిమా అసెంబ్లీ · {n} క్లిప్‌లు",
+"anim_intro": "ప్రతి ప్రత్యామ్నాయం 3D యానిమాటిక్‌గా ప్లే అవుతుంది: కెమెరా ప్లాన్ చేసిన మార్గంలో కదులుతుంది, నటులు బ్లాకింగ్‌ను ప్రదర్శిస్తారు.",
+"learn_title": "దర్శకత్వం నేర్చుకోండి",
+"learn_intro": "ప్రతి కళపై చిన్న పాఠాలు — దేనిని గమనించాలి, ఎందుకు ముఖ్యం, ఏమి చేయాలి. ప్రతి పాఠం దర్శకుడి సమీక్ష మీ వీడియోలపై వాడే తర్కమే, కాబట్టి మీ సొంత ఫుటేజ్ నుండే నేర్చుకుంటారు.",
+"learn_focus": "తర్వాత ఇది సాధన చేయండి (మీ వీడియోల నుండి):",
+"learn_none": "మీ పనికి ఏ పాఠాలు ముఖ్యమో చూడటానికి వీడియో అప్‌లోడ్ చేయండి.",
+"learn_exercise": "సాధన:",
+"learn_symptom": "మీరు గమనిస్తారు",
+"learn_why": "ఎందుకు ముఖ్యం:",
+"learn_do": "ఏమి చేయాలి:",
+"learn_seen": "మీ వీడియోల్లో {n}× కనిపించింది"
 },
 "ta": {
 "nav_dashboard": "தனிப்பட்ட டாஷ்போர்டு",
@@ -318,7 +338,17 @@
 "asm_full_only": "படத் தொகுப்பு முழு (சுய-ஹோஸ்ட்) பதிப்பில் இயங்கும்.",
 "job_assemble": "படம் வரிசைப்படுத்தப்படுகிறது",
 "dash_new_assembly": "புதிய படத் தொகுப்பு",
-"dash_assembly": "படத் தொகுப்பு · {n} கிளிப்புகள்"
+"dash_assembly": "படத் தொகுப்பு · {n} கிளிப்புகள்",
+"anim_intro": "ஒவ்வொரு மாற்றும் 3D அனிமேட்டிக்காக ஓடும்: கேமரா திட்டமிட்ட பாதையில் நகரும், நடிகர்கள் பிளாக்கிங்கை நடித்துக் காட்டுவார்கள்.",
+"learn_title": "இயக்கம் கற்க",
+"learn_intro": "ஒவ்வொரு கலைக்கும் சிறு பாடங்கள் — எதைக் கவனிக்க வேண்டும், ஏன் முக்கியம், என்ன செய்ய வேண்டும். ஒவ்வொரு பாடமும் இயக்குநர் மதிப்பாய்வு உங்கள் வீடியோக்களில் பயன்படுத்தும் அதே காரணம், எனவே உங்கள் சொந்தக் காட்சிகளிலிருந்தே கற்கிறீர்கள்.",
+"learn_focus": "அடுத்து இதைப் பயிற்சி செய்யுங்கள் (உங்கள் வீடியோக்களிலிருந்து):",
+"learn_none": "உங்கள் பணிக்கு எந்தப் பாடங்கள் முக்கியம் எனப் பார்க்க வீடியோ பதிவேற்றுங்கள்.",
+"learn_exercise": "பயிற்சி:",
+"learn_symptom": "நீங்கள் கவனிப்பீர்கள்",
+"learn_why": "ஏன் முக்கியம்:",
+"learn_do": "என்ன செய்ய வேண்டும்:",
+"learn_seen": "உங்கள் வீடியோக்களில் {n}× தென்பட்டது"
 },
 "kn": {
 "nav_dashboard": "ಖಾಸಗಿ ಡ್ಯಾಶ್‌ಬೋರ್ಡ್",
@@ -425,7 +455,17 @@
 "asm_full_only": "ಚಿತ್ರ ಜೋಡಣೆ ಪೂರ್ಣ (ಸ್ವಯಂ-ಹೋಸ್ಟ್) ಆವೃತ್ತಿಯಲ್ಲಿ ಕೆಲಸ ಮಾಡುತ್ತದೆ.",
 "job_assemble": "ಚಿತ್ರ ಕ್ರಮಗೊಳ್ಳುತ್ತಿದೆ",
 "dash_new_assembly": "ಹೊಸ ಚಿತ್ರ ಜೋಡಣೆ",
-"dash_assembly": "ಚಿತ್ರ ಜೋಡಣೆ · {n} ಕ್ಲಿಪ್‌ಗಳು"
+"dash_assembly": "ಚಿತ್ರ ಜೋಡಣೆ · {n} ಕ್ಲಿಪ್‌ಗಳು",
+"anim_intro": "ಪ್ರತಿ ಪರ್ಯಾಯವೂ 3D ಅನಿಮ್ಯಾಟಿಕ್ ಆಗಿ ಪ್ಲೇ ಆಗುತ್ತದೆ: ಕ್ಯಾಮೆರಾ ಯೋಜಿತ ಹಾದಿಯಲ್ಲಿ ಚಲಿಸುತ್ತದೆ, ನಟರು ಬ್ಲಾಕಿಂಗ್ ಅಭಿನಯಿಸುತ್ತಾರೆ.",
+"learn_title": "ನಿರ್ದೇಶನ ಕಲಿಯಿರಿ",
+"learn_intro": "ಪ್ರತಿ ಕಲೆಯ ಮೇಲೆ ಚಿಕ್ಕ ಪಾಠಗಳು — ಏನನ್ನು ಗಮನಿಸಬೇಕು, ಏಕೆ ಮುಖ್ಯ, ಏನು ಮಾಡಬೇಕು. ಪ್ರತಿ ಪಾಠವೂ ನಿರ್ದೇಶಕರ ವಿಮರ್ಶೆ ನಿಮ್ಮ ವೀಡಿಯೊಗಳ ಮೇಲೆ ಬಳಸುವ ಅದೇ ತರ್ಕ, ಹಾಗಾಗಿ ನಿಮ್ಮದೇ ದೃಶ್ಯಗಳಿಂದ ಕಲಿಯುತ್ತೀರಿ.",
+"learn_focus": "ಮುಂದೆ ಇದನ್ನು ಅಭ್ಯಾಸ ಮಾಡಿ (ನಿಮ್ಮ ವೀಡಿಯೊಗಳಿಂದ):",
+"learn_none": "ನಿಮ್ಮ ಕೆಲಸಕ್ಕೆ ಯಾವ ಪಾಠಗಳು ಮುಖ್ಯ ಎಂದು ನೋಡಲು ವೀಡಿಯೊ ಅಪ್‌ಲೋಡ್ ಮಾಡಿ.",
+"learn_exercise": "ಅಭ್ಯಾಸ:",
+"learn_symptom": "ನೀವು ಗಮನಿಸುವಿರಿ",
+"learn_why": "ಏಕೆ ಮುಖ್ಯ:",
+"learn_do": "ಏನು ಮಾಡಬೇಕು:",
+"learn_seen": "ನಿಮ್ಮ ವೀಡಿಯೊಗಳಲ್ಲಿ {n}× ಕಂಡಿದೆ"
 },
 "ml": {
 "nav_dashboard": "സ്വകാര്യ ഡാഷ്‌ബോർഡ്",
@@ -532,7 +572,17 @@
 "asm_full_only": "സിനിമ അസംബ്ലി പൂർണ (സെൽഫ്-ഹോസ്റ്റഡ്) പതിപ്പിൽ പ്രവർത്തിക്കുന്നു.",
 "job_assemble": "സിനിമ ക്രമീകരിക്കുന്നു",
 "dash_new_assembly": "പുതിയ സിനിമ അസംബ്ലി",
-"dash_assembly": "സിനിമ അസംബ്ലി · {n} ക്ലിപ്പുകൾ"
+"dash_assembly": "സിനിമ അസംബ്ലി · {n} ക്ലിപ്പുകൾ",
+"anim_intro": "ഓരോ ബദലും 3D ആനിമാറ്റിക്കായി പ്ലേ ചെയ്യും: ക്യാമറ ആസൂത്രണം ചെയ്ത വഴിയിൽ നീങ്ങും, അഭിനേതാക്കൾ ബ്ലോക്കിംഗ് അവതരിപ്പിക്കും.",
+"learn_title": "സംവിധാനം പഠിക്കാം",
+"learn_intro": "ഓരോ കലയെക്കുറിച്ചും ചെറു പാഠങ്ങൾ — എന്ത് ശ്രദ്ധിക്കണം, എന്തുകൊണ്ട് പ്രധാനം, എന്ത് ചെയ്യണം. ഓരോ പാഠവും സംവിധായകന്റെ അവലോകനം നിങ്ങളുടെ വീഡിയോകളിൽ ഉപയോഗിക്കുന്ന അതേ യുക്തിയാണ്, അതിനാൽ സ്വന്തം ദൃശ്യങ്ങളിൽ നിന്നുതന്നെ പഠിക്കുന്നു.",
+"learn_focus": "അടുത്തതായി ഇത് പരിശീലിക്കുക (നിങ്ങളുടെ വീഡിയോകളിൽ നിന്ന്):",
+"learn_none": "നിങ്ങളുടെ ജോലിക്ക് ഏത് പാഠങ്ങളാണ് പ്രധാനമെന്ന് കാണാൻ വീഡിയോ അപ്‌ലോഡ് ചെയ്യുക.",
+"learn_exercise": "പരിശീലനം:",
+"learn_symptom": "നിങ്ങൾ ശ്രദ്ധിക്കും",
+"learn_why": "എന്തുകൊണ്ട് പ്രധാനം:",
+"learn_do": "എന്ത് ചെയ്യണം:",
+"learn_seen": "നിങ്ങളുടെ വീഡിയോകളിൽ {n}× കണ്ടു"
 },
 "bn": {
 "nav_dashboard": "ব্যক্তিগত ড্যাশবোর্ড",
@@ -639,7 +689,17 @@
 "asm_full_only": "ছবি জোড়া লাগানো সম্পূর্ণ (সেলফ-হোস্টেড) সংস্করণে চলে।",
 "job_assemble": "ছবি সাজানো হচ্ছে",
 "dash_new_assembly": "নতুন ছবি অ্যাসেম্বলি",
-"dash_assembly": "ছবি অ্যাসেম্বলি · {n}টি ক্লিপ"
+"dash_assembly": "ছবি অ্যাসেম্বলি · {n}টি ক্লিপ",
+"anim_intro": "প্রতিটি বিকল্প 3D অ্যানিমেটিক হিসেবে চলে: ক্যামেরা পরিকল্পিত পথে চলে আর অভিনেতারা ব্লকিং অভিনয় করে দেখান।",
+"learn_title": "পরিচালনা শিখুন",
+"learn_intro": "প্রতিটি কারিগরির উপর ছোট পাঠ — কী খেয়াল করবেন, কেন জরুরি, কী করবেন। প্রতিটি পাঠ সেই একই যুক্তি যা পরিচালকের পর্যালোচনা আপনার ভিডিওতে ব্যবহার করে, তাই আপনি নিজের ফুটেজ থেকেই শেখেন।",
+"learn_focus": "এরপর এটি অনুশীলন করুন (আপনার ভিডিও থেকে):",
+"learn_none": "আপনার কাজের জন্য কোন পাঠ সবচেয়ে জরুরি দেখতে ভিডিও আপলোড করুন।",
+"learn_exercise": "অনুশীলন:",
+"learn_symptom": "আপনি লক্ষ করবেন",
+"learn_why": "কেন জরুরি:",
+"learn_do": "কী করবেন:",
+"learn_seen": "আপনার ভিডিওতে {n}× দেখা গেছে"
 },
 "mr": {
 "nav_dashboard": "खाजगी डॅशबोर्ड",
@@ -746,7 +806,17 @@
 "asm_full_only": "चित्रपट जुळवणी पूर्ण (सेल्फ-होस्टेड) आवृत्तीत चालते.",
 "job_assemble": "चित्रपट क्रमाने लावला जात आहे",
 "dash_new_assembly": "नवीन चित्रपट जुळवणी",
-"dash_assembly": "चित्रपट जुळवणी · {n} क्लिप"
+"dash_assembly": "चित्रपट जुळवणी · {n} क्लिप",
+"anim_intro": "प्रत्येक पर्याय 3D अ‍ॅनिमॅटिक म्हणून चालतो: कॅमेरा नियोजित मार्गाने फिरतो आणि कलाकार ब्लॉकिंग साकारतात.",
+"learn_title": "दिग्दर्शन शिका",
+"learn_intro": "प्रत्येक कलेवर छोटे धडे — कशाकडे लक्ष द्यावे, ते का महत्त्वाचे, आणि काय करावे. प्रत्येक धडा तोच तर्क आहे जो दिग्दर्शकाचे परीक्षण तुमच्या व्हिडिओंवर वापरते, म्हणून तुम्ही स्वतःच्या फुटेजमधूनच शिकता.",
+"learn_focus": "पुढे याचा सराव करा (तुमच्या व्हिडिओंवरून):",
+"learn_none": "तुमच्या कामासाठी कोणते धडे सर्वात महत्त्वाचे ते पाहण्यासाठी व्हिडिओ अपलोड करा.",
+"learn_exercise": "सराव:",
+"learn_symptom": "तुम्हाला दिसेल",
+"learn_why": "का महत्त्वाचे:",
+"learn_do": "काय करावे:",
+"learn_seen": "तुमच्या व्हिडिओंमध्ये {n}× दिसले"
 },
 "es": {
 "nav_dashboard": "Panel privado",
@@ -853,7 +923,17 @@
 "asm_full_only": "El montaje de película funciona en la edición completa (autoalojada).",
 "job_assemble": "Ordenando la película",
 "dash_new_assembly": "Nuevo montaje de película",
-"dash_assembly": "Montaje de película · {n} clips"
+"dash_assembly": "Montaje de película · {n} clips",
+"anim_intro": "Cada alternativa se reproduce como animática 3D: la cámara sigue su recorrido planificado y los actores interpretan la puesta en escena.",
+"learn_title": "Aprende a dirigir",
+"learn_intro": "Lecciones breves sobre cada oficio: qué observar, por qué importa y qué hacer. Cada lección es el mismo razonamiento que la revisión del director aplica a tus vídeos, así que aprendes de tu propio material.",
+"learn_focus": "Practica ahora (según tus vídeos):",
+"learn_none": "Sube un vídeo para ver qué lecciones importan más en tu trabajo.",
+"learn_exercise": "Ejercicio:",
+"learn_symptom": "Notarás",
+"learn_why": "Por qué importa:",
+"learn_do": "Qué hacer:",
+"learn_seen": "visto {n}× en tus vídeos"
 },
 "fr": {
 "nav_dashboard": "Tableau de bord privé",
@@ -960,7 +1040,17 @@
 "asm_full_only": "L'assemblage de film fonctionne dans l'édition complète (auto-hébergée).",
 "job_assemble": "Mise en ordre du film",
 "dash_new_assembly": "Nouvel assemblage de film",
-"dash_assembly": "Assemblage de film · {n} plans"
+"dash_assembly": "Assemblage de film · {n} plans",
+"anim_intro": "Chaque proposition se joue en animatique 3D : la caméra suit son trajet prévu et les acteurs jouent la mise en place.",
+"learn_title": "Apprendre la réalisation",
+"learn_intro": "De courtes leçons sur chaque métier : quoi observer, pourquoi c'est important et que faire. Chaque leçon reprend le raisonnement que l'avis du réalisateur applique à vos vidéos : vous apprenez à partir de vos propres images.",
+"learn_focus": "À travailler ensuite (d'après vos vidéos) :",
+"learn_none": "Importez une vidéo pour voir les leçons les plus utiles pour votre travail.",
+"learn_exercise": "Exercice :",
+"learn_symptom": "Vous remarquerez",
+"learn_why": "Pourquoi c'est important :",
+"learn_do": "À faire :",
+"learn_seen": "vu {n}× dans vos vidéos"
 },
 "de": {
 "nav_dashboard": "Privates Dashboard",
@@ -1067,7 +1157,17 @@
 "asm_full_only": "Das Zusammenstellen läuft in der Vollversion (selbst gehostet).",
 "job_assemble": "Film wird geordnet",
 "dash_new_assembly": "Neue Filmzusammenstellung",
-"dash_assembly": "Filmzusammenstellung · {n} Clips"
+"dash_assembly": "Filmzusammenstellung · {n} Clips",
+"anim_intro": "Jede Alternative läuft als 3D-Animatic: Die Kamera folgt ihrem geplanten Weg und die Darsteller spielen die Blocking-Anweisung.",
+"learn_title": "Regie lernen",
+"learn_intro": "Kurze Lektionen zu jedem Gewerk – worauf achten, warum es zählt und was zu tun ist. Jede Lektion ist dieselbe Begründung, die das Regie-Feedback auf deine Videos anwendet – du lernst an deinem eigenen Material.",
+"learn_focus": "Als Nächstes üben (aus deinen Videos):",
+"learn_none": "Lade ein Video hoch, um zu sehen, welche Lektionen für deine Arbeit am wichtigsten sind.",
+"learn_exercise": "Übung:",
+"learn_symptom": "Du bemerkst",
+"learn_why": "Warum es zählt:",
+"learn_do": "Was zu tun ist:",
+"learn_seen": "{n}× in deinen Videos gesehen"
 },
 "pt": {
 "nav_dashboard": "Painel privado",
@@ -1174,7 +1274,17 @@
 "asm_full_only": "A montagem do filme funciona na edição completa (auto-hospedada).",
 "job_assemble": "Ordenando o filme",
 "dash_new_assembly": "Nova montagem de filme",
-"dash_assembly": "Montagem de filme · {n} clipes"
+"dash_assembly": "Montagem de filme · {n} clipes",
+"anim_intro": "Cada alternativa toca como animatic 3D: a câmera segue o caminho planejado e os atores fazem a marcação de cena.",
+"learn_title": "Aprenda a dirigir",
+"learn_intro": "Lições curtas sobre cada ofício: o que observar, por que importa e o que fazer. Cada lição é o mesmo raciocínio que a avaliação do diretor aplica aos seus vídeos, então você aprende com o seu próprio material.",
+"learn_focus": "Pratique em seguida (a partir dos seus vídeos):",
+"learn_none": "Envie um vídeo para ver quais lições mais importam no seu trabalho.",
+"learn_exercise": "Exercício:",
+"learn_symptom": "Você vai notar",
+"learn_why": "Por que importa:",
+"learn_do": "O que fazer:",
+"learn_seen": "visto {n}× nos seus vídeos"
 },
 "ar": {
 "nav_dashboard": "لوحة خاصة",
@@ -1281,7 +1391,17 @@
 "asm_full_only": "تجميع الفيلم يعمل في الإصدار الكامل (المستضاف ذاتيًا).",
 "job_assemble": "ترتيب الفيلم",
 "dash_new_assembly": "تجميع فيلم جديد",
-"dash_assembly": "تجميع فيلم · {n} مقطع"
+"dash_assembly": "تجميع فيلم · {n} مقطع",
+"anim_intro": "يُعرض كل بديل كرسوم متحركة ثلاثية الأبعاد: تتحرك الكاميرا على مسارها المخطط ويؤدي الممثلون الحركة المرسومة.",
+"learn_title": "تعلّم الإخراج",
+"learn_intro": "دروس قصيرة في كل حرفة — ما الذي تلاحظه، ولماذا يهم، وماذا تفعل. كل درس هو المنطق نفسه الذي تطبقه مراجعة المخرج على فيديوهاتك، فتتعلم من لقطاتك أنت.",
+"learn_focus": "تدرّب على هذا بعد ذلك (من فيديوهاتك):",
+"learn_none": "ارفع فيديو لترى أي الدروس أهم لعملك.",
+"learn_exercise": "تمرين:",
+"learn_symptom": "ستلاحظ",
+"learn_why": "لماذا يهم:",
+"learn_do": "ماذا تفعل:",
+"learn_seen": "ظهر {n}× في فيديوهاتك"
 },
 "ja": {
 "nav_dashboard": "プライベートダッシュボード",
@@ -1388,7 +1508,17 @@
 "asm_full_only": "映画の組み立てはフル（セルフホスト）版で動作します。",
 "job_assemble": "映画を並べています",
 "dash_new_assembly": "新しい映画の組み立て",
-"dash_assembly": "映画の組み立て · {n}クリップ"
+"dash_assembly": "映画の組み立て · {n}クリップ",
+"anim_intro": "各代替案は3Dアニマティックとして再生されます。カメラは計画された経路を動き、俳優はブロッキングを演じます。",
+"learn_title": "演出を学ぶ",
+"learn_intro": "各分野の短いレッスン：何に注目するか、なぜ大切か、どうするか。すべて監督レビューがあなたの映像に使っているのと同じ考え方なので、自分の素材から学べます。",
+"learn_focus": "次に練習すること（あなたの映像から）：",
+"learn_none": "映像をアップロードすると、あなたに重要なレッスンが分かります。",
+"learn_exercise": "練習：",
+"learn_symptom": "気づくこと",
+"learn_why": "なぜ大切か：",
+"learn_do": "どうするか：",
+"learn_seen": "あなたの映像で{n}回"
 },
 "ko": {
 "nav_dashboard": "개인 대시보드",
@@ -1495,7 +1625,17 @@
 "asm_full_only": "영화 조립은 전체(자체 호스팅) 버전에서 작동합니다.",
 "job_assemble": "영화 순서 정하는 중",
 "dash_new_assembly": "새 영화 조립",
-"dash_assembly": "영화 조립 · 클립 {n}개"
+"dash_assembly": "영화 조립 · 클립 {n}개",
+"anim_intro": "각 대안은 3D 애니매틱으로 재생됩니다. 카메라는 계획된 경로를 따라 움직이고 배우는 블로킹을 연기합니다.",
+"learn_title": "연출 배우기",
+"learn_intro": "각 분야에 대한 짧은 수업: 무엇을 봐야 하는지, 왜 중요한지, 어떻게 해야 하는지. 모든 수업은 감독 리뷰가 당신의 영상에 쓰는 것과 같은 논리라서, 자기 영상으로 배웁니다.",
+"learn_focus": "다음 연습 (내 영상 기준):",
+"learn_none": "영상을 올리면 내 작업에 가장 중요한 수업을 볼 수 있습니다.",
+"learn_exercise": "연습:",
+"learn_symptom": "이런 걸 보게 됩니다",
+"learn_why": "왜 중요한가:",
+"learn_do": "이렇게 하세요:",
+"learn_seen": "내 영상에서 {n}번 발견"
 },
 "zh": {
 "nav_dashboard": "私人仪表板",
@@ -1602,6 +1742,16 @@
 "asm_full_only": "影片组装在完整（自托管）版本中运行。",
 "job_assemble": "正在为影片排序",
 "dash_new_assembly": "新建影片组装",
-"dash_assembly": "影片组装 · {n} 条素材"
+"dash_assembly": "影片组装 · {n} 条素材",
+"anim_intro": "每个备选方案都以 3D 动态分镜播放：摄影机沿规划路径运动，演员按走位表演。",
+"learn_title": "学习导演",
+"learn_intro": "每门手艺的小课：注意什么、为什么重要、该怎么做。每一课都是导演点评用在你视频上的同一套道理，所以你是从自己的素材里学习。",
+"learn_focus": "接下来练习（根据你的视频）：",
+"learn_none": "上传视频，看看哪些课对你的作品最重要。",
+"learn_exercise": "练习：",
+"learn_symptom": "你会注意到",
+"learn_why": "为什么重要：",
+"learn_do": "怎么做：",
+"learn_seen": "在你的视频中出现 {n} 次"
 }
 }

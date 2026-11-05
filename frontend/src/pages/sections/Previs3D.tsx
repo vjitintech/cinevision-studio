@@ -1,11 +1,12 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { api, ApiError } from "../../api";
 import { ErrorNote, Labeled } from "../../components/common";
 import { PlanView, PlanMarker } from "../../previs/PlanView";
 import { PrevisCanvas } from "../../previs/PrevisCanvas";
 import { clamp, deg, rad, V3 } from "../../previs/math";
 import { frustumLines, Line3 } from "../../previs/render";
-import { aspect, camAt, lightingOpts, pathLines, sceneFaces } from "../../previs/shot";
+import { aspect, camAt, lightingOpts, pathLines } from "../../previs/shot";
+import { animatedFaces, blockingLabel } from "../../previs/animate";
 import type { Scene } from "../../types";
 import { useWS } from "../Workspace";
 
@@ -15,12 +16,13 @@ export const PrevisSection = {
     const c = ws.concept, shot = ws.shot, scene = ws.scene;
     const [orbitV, setOrbit] = useState({ yaw: -35, pitch: 28, dist: 9 });
     const drag = useRef<{ x: number; y: number } | null>(null);
-    const faces = useMemo(() => (scene ? sceneFaces(scene) : []), [scene]);
     if (!c || !shot || !scene) return <div className="empty">Generate and open a concept to explore it in 3D.</div>;
     const centre: V3 = [scene.subjects.reduce((a, s) => a + s.x, 0) / scene.subjects.length, 1, scene.subjects.reduce((a, s) => a + s.z, 0) / scene.subjects.length];
     const obs: V3 = [centre[0] + orbitV.dist * Math.cos(rad(orbitV.pitch)) * Math.sin(rad(orbitV.yaw)), centre[1] + orbitV.dist * Math.sin(rad(orbitV.pitch)),
       centre[2] - orbitV.dist * Math.cos(rad(orbitV.pitch)) * Math.cos(rad(orbitV.yaw))];
     const shotCam = camAt(shot, ws.localT, ws.camera.state, ws.shotOffset(shot));
+    // people act out the shot's blocking as the clock runs (Play at the bottom, or scrub)
+    const faces = animatedFaces(scene, shot, ws.localT, shotCam.pos);
     const lit = lightingOpts(scene, shot, ws.lighting.state);
     const lines: Line3[] = [...frustumLines(shotCam, c.data.sensor, aspect(c.data), "#86b4e0", 1.0), ...pathLines(shot, "#e3a453", ws.camera.state, ws.shotOffset(shot))];
     for (const L of lit.lights || []) {
@@ -45,7 +47,8 @@ export const PrevisSection = {
     };
     return (
       <div className="stack">
-        <div className="row"><h2 className="grow" style={{ margin: 0 }}>3D previsualisation</h2><span className="small muted">Drag the view to orbit · shot {shot.index + 1}</span></div>
+        <div className="row"><h2 className="grow" style={{ margin: 0 }}>3D previsualisation</h2><span className="small muted">Drag the view to orbit · shot {shot.index + 1} · press Play below to animate camera and actors</span></div>
+        <p className="small faint" style={{ margin: 0 }}>Blocking: {blockingLabel(shot)}</p>
         <div className="stage">
           <PrevisCanvas cam={{ pos: obs, target: centre, focal: 24, roll: 0 }} faces={faces} aspect={16 / 9}
             opts={{ sensor: "full_frame", ...lit, haze: false, lines, labels }} onPointer={onPointer} label="Overview of the proxy set with camera and lights" />

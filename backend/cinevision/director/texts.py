@@ -220,3 +220,14 @@ ASSEMBLY = {
 
 CUES = {w: w for w in ("indoor", "outdoor", "night", "day", "dawn", "dusk", "fast", "still", "crowd", "alone", "person",
                        "close", "wide", "sad", "tense", "warm", "titles", "credits")}
+
+EXERCISES = {
+    "story": "Write one sentence: what should the audience feel at the end of this scene? Shoot it, watch it with the sound off, and check whether that feeling comes through.",
+    "camera": "Shoot the same 10-second moment three ways: locked off, slow push-in, handheld. Watch them back to back and note what each one makes you feel.",
+    "composition": "Frame one person three times: dead centre, on the left third looking right, on the right third looking right. Which one feels uneasy, and why?",
+    "lighting": "Light a face with one lamp only. Move it from the front, to the side, to behind. Photograph each position and compare the mood.",
+    "colour": "Pick two colours for your scene (one for the character, one for the world). Place them in costume and set, then check them in the review's palette.",
+    "sound": "Record 30 seconds of 'silence' in your location (room tone). Lay it under a cut and hear how it removes the dead gaps.",
+    "editing": "Cut the same three shots in two orders and two lengths (fast and slow). Show both to a friend and ask what each version was about.",
+    "titles": "Make a title card and time how long it takes you to read it twice. Hold it on screen for at least that long.",
+}

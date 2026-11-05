@@ -64,3 +64,9 @@ def test_assembly_text_complete(lang):
     for k, v in en.ASSEMBLY.items():
         assert mod.ASSEMBLY[k].strip() and set(PH.findall(mod.ASSEMBLY[k])) == set(PH.findall(v)), (lang, k)
     assert set(mod.CUES) == set(en.CUES) and all(mod.CUES.values())
+
+
+@pytest.mark.parametrize("lang", OTHER)
+def test_exercises_translated(lang):
+    mod = importlib.import_module(f"cinevision.director.i18n.{lang}")
+    assert set(mod.EXERCISES) == set(en.EXERCISES) and all(v.strip() for v in mod.EXERCISES.values())

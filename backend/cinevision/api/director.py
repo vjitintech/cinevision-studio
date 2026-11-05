@@ -62,6 +62,44 @@ async def rerun_review(request: Request):
     return ok({"job": jobs.public(job)}, 202)
 
 
+# ---------------------------------------------------------------- learn directing
+async def learn(request: Request):
+    """Lessons = the review's own craft explanations, grouped by department, plus what *your* videos most need."""
+    import re
+    from collections import Counter
+    from ..director import review as RV
+    from ..director.i18n import pack
+    ctx = current(request)
+    lang = _lang(request, ctx.uid)
+    P = pack(lang)
+    k = keyring()
+    seen, problems = Counter(), Counter()
+    rows = db.all_("SELECT id, data_enc FROM director_reviews WHERE owner_id=?", (ctx.uid,))
+    for r in rows:
+        data = k.dec_json(r["data_enc"], f"director_reviews:data:{r['id']}") or {}
+        for d in data.get("departments", []):
+            for f in d.get("findings", []):
+                seen[f["code"]] += 1
+                if f["status"] in ("improve", "problem"):
+                    problems[f["code"]] += 1
+    chapters = []
+    for dep in RV.ORDER:
+        lessons = []
+        for code, t in P["FINDINGS"].items():
+            prefix = {"story": "story.", "camera": "cam.", "composition": "comp.", "lighting": "light.", "colour": "col.",
+                      "sound": "snd.", "editing": "edit.", "titles": "titles."}[dep]
+            if not code.startswith(prefix) or not t.get("why"):
+                continue
+            blank = lambda s: re.sub(r"\{\w+\}", "…", s) if s else s  # noqa: E731
+            lessons.append({"code": code, "symptom": blank(t.get("obs")), "why": blank(t.get("why")),
+                            "do": blank(t.get("sug")) if t.get("sug") and "{advice}" not in t.get("sug", "") else None,
+                            "seen_in_your_videos": seen.get(code, 0), "to_practise": problems.get(code, 0)})
+        chapters.append({"id": dep, "title": P["DEPARTMENTS"][dep], "exercise": P["EXERCISES"].get(dep), "lessons": lessons,
+                         "to_practise": sum(l["to_practise"] for l in lessons)})
+    focus = [c["id"] for c in sorted(chapters, key=lambda c: -c["to_practise"]) if c["to_practise"]][:3]
+    return ok({"language": lang, "chapters": chapters, "focus": focus, "reviews": len(rows)})
+
+
 # ---------------------------------------------------------------- language
 async def get_prefs(request: Request):
     ctx = current(request)
@@ -200,6 +238,7 @@ async def hardware(request: Request):
 routes = [
     Route("/api/projects/{pid}/review", get_review, methods=["GET"]),
     Route("/api/projects/{pid}/review", rerun_review, methods=["POST"]),
+    Route("/api/learn", learn, methods=["GET"]),
     Route("/api/me/preferences", get_prefs, methods=["GET"]),
     Route("/api/me/preferences", put_prefs, methods=["PUT"]),
     Route("/api/ai/local", get_local_ai, methods=["GET"]),

@@ -153,3 +153,19 @@ CUES = {'indoor': 'innen',
  'warm': 'warm',
  'titles': 'Titel',
  'credits': 'Abspann'}
+
+EXERCISES = {'story': 'Schreib einen Satz: Was soll das Publikum am Ende dieser Szene fühlen? Dreh sie, schau sie ohne Ton und prüfe, ob dieses Gefühl '
+          'ankommt.',
+ 'camera': 'Dreh denselben 10-Sekunden-Moment auf drei Arten: statisch, langsame Ranfahrt, Handkamera. Schau sie hintereinander und '
+           'notiere, was jede in dir auslöst.',
+ 'composition': 'Kadriere eine Person dreimal: genau mittig, im linken Drittel nach rechts blickend, im rechten Drittel nach rechts '
+                'blickend. Welche wirkt unbehaglich, und warum?',
+ 'lighting': 'Leuchte ein Gesicht mit nur einer Lampe aus. Bewege sie von vorne zur Seite und nach hinten. Fotografiere jede Position und '
+             'vergleiche die Stimmung.',
+ 'colour': 'Wähle zwei Farben für deine Szene (eine für die Figur, eine für die Welt). Bring sie in Kostüm und Set unter und prüfe sie in '
+           'der Palette des Feedbacks.',
+ 'sound': 'Nimm 30 Sekunden „Stille“ an deinem Drehort auf (Raumton). Leg sie unter einen Schnitt und hör, wie die toten Lücken '
+          'verschwinden.',
+ 'editing': 'Schneide dieselben drei Einstellungen in zwei Reihenfolgen und zwei Längen (schnell und langsam). Zeig beide jemandem und '
+            'frag, worum es jeweils ging.',
+ 'titles': 'Gestalte eine Titeltafel und stopp, wie lange du brauchst, um sie zweimal zu lesen. Lass sie mindestens so lange stehen.'}

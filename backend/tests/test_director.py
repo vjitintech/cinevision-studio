@@ -154,3 +154,16 @@ def test_review_private_and_deleted_with_project(server, film):
     assert intruder.get(f"/api/projects/{pid}/review").status == 404
     assert owner.delete(f"/api/projects/{pid}").status == 204
     assert owner.get(f"/api/projects/{pid}/review").status == 404
+
+
+def test_learn_directing_uses_your_reviews(user, film):
+    empty = user.get("/api/learn").json
+    assert len(empty["chapters"]) == 8 and empty["focus"] == [] and empty["reviews"] == 0
+    _upload(user, film, "learn")
+    d = user.get("/api/learn?lang=ta").json
+    assert d["language"] == "ta" and d["reviews"] == 1
+    for ch in d["chapters"]:
+        assert ch["exercise"] and ch["lessons"]
+        for l in ch["lessons"]:
+            assert l["why"] and "{" not in l["why"] and "{" not in (l["symptom"] or "")
+    assert d["focus"], "the film has things to improve (e.g. title card timing, sound), so there is something to practise"

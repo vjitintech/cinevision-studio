@@ -113,6 +113,16 @@ def main():
             expect(page.locator(".dept-chip")).to_have_count(8)
             expect(page.locator("#dept-sound")).to_be_visible()
             expect(page.get_by_role("heading", name="Ways to edit this video")).to_be_visible()
+            # every alternative plays as an animated 3D animatic (canvas pixels change over time)
+            anim = page.locator(".anim-card canvas").first
+            anim.scroll_into_view_if_needed()
+            expect(page.locator(".anim-card canvas")).to_have_count(4, timeout=30000)
+            time.sleep(0.4)
+            f1 = anim.evaluate("c => c.toDataURL()")
+            time.sleep(1.2)
+            assert anim.evaluate("c => c.toDataURL()") != f1, "3D animatic did not move"
+            page.screenshot(path=shots / "03e-review-3d.png", full_page=False)
+            page.locator("section.verdict").scroll_into_view_if_needed()
             time.sleep(1)
             page.screenshot(path=shots / "03-review.png", full_page=False)
             # language switch: the review is re-rendered in the chosen language (RTL for Arabic)
@@ -207,6 +217,12 @@ def main():
             page.get_by_label("Type the project name to confirm").fill("Sc. 14 — Launch pad, day")
             page.get_by_role("button", name="Delete project permanently").click()
             expect(page.get_by_text("No projects yet")).to_be_visible()
+            # learn directing: chapters with lessons built from the review, practice focus from this user's videos
+            page.get_by_role("link", name="Learn directing").click()
+            expect(page.locator("section.chapter")).to_have_count(8)
+            page.locator("section.chapter button").nth(5).click()
+            expect(page.locator(".lesson").first).to_be_visible()
+            page.screenshot(path=shots / "11a-learn.png", full_page=False)
             # movie assembly: many clips + a short screenplay → ordered cut with reasons
             page.get_by_role("link", name="Movie assembly").click()
             page.get_by_label("Name of the film").fill("Launch day")

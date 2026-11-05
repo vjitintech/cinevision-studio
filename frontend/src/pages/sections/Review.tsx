@@ -4,6 +4,7 @@ import { linkTo } from "../../router";
 import { useT } from "../../i18n";
 import { usePoll } from "../../components/common";
 import { useWS } from "../Workspace";
+import { ConceptAnimation } from "../../previs/ConceptAnimation";
 
 interface Finding { code: string; status: string; basis: string; confidence: number; observation: string; suggestion?: string | null; why?: string | null }
 interface Dept { id: string; title: string; status: string; status_label: string; findings: Finding[]; score: number | null }
@@ -119,8 +120,20 @@ export const ReviewSection = {
         {review.alternatives.length > 0 && (
           <>
             <h3>{t("alternatives")}</h3>
-            <ul className="small">{review.alternatives.map((a) => <li key={a.concept_id}>{a.name} — {t("match", { n: a.match })}</li>)}</ul>
-            <a {...linkTo(`/p/${ws.pid}/concepts`)}>{t("open_concepts")}</a>
+            <p className="small muted">{t("anim_intro")}</p>
+            <div className="anim-grid">
+              {review.alternatives.map((a) => {
+                const c = ws.concepts.find((x) => x.lineage_id === a.concept_id || x.id === a.concept_id);
+                return (
+                  <figure key={a.concept_id} className="concept anim-card">
+                    {c && <ConceptAnimation concept={c} />}
+                    <figcaption><b>{a.name}</b> <span className="small faint">· {t("match", { n: a.match })}</span>
+                      {c && <div className="small">{c.data.objective}</div>}</figcaption>
+                  </figure>
+                );
+              })}
+            </div>
+            <a {...linkTo(`/p/${ws.pid}/previs`)}>{t("open_concepts")}</a>
           </>
         )}
       </div>

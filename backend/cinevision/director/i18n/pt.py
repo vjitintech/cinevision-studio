@@ -153,3 +153,16 @@ CUES = {'indoor': 'interior',
  'warm': 'caloroso',
  'titles': 'títulos',
  'credits': 'créditos'}
+
+EXERCISES = {'story': 'Escreva uma frase: o que o público deve sentir no fim desta cena? Filme, assista sem som e veja se esse sentimento chega.',
+ 'camera': 'Filme o mesmo momento de 10 segundos de três jeitos: fixo, aproximação lenta e câmera na mão. Assista em sequência e anote o '
+           'que cada um faz você sentir.',
+ 'composition': 'Enquadre uma pessoa três vezes: bem no centro, no terço esquerdo olhando para a direita, no terço direito olhando para a '
+                'direita. Qual incomoda, e por quê?',
+ 'lighting': 'Ilumine um rosto com uma única lâmpada. Mude-a de frente, de lado e por trás. Fotografe cada posição e compare o clima.',
+ 'colour': 'Escolha duas cores para a cena (uma para o personagem, outra para o mundo). Coloque-as no figurino e no cenário e confira na '
+           'paleta da avaliação.',
+ 'sound': "Grave 30 segundos de 'silêncio' na locação (som ambiente da sala). Coloque sob um corte e ouça os buracos mortos sumirem.",
+ 'editing': 'Monte os mesmos três planos em duas ordens e duas durações (rápido e lento). Mostre a alguém e pergunte sobre o que era cada '
+            'versão.',
+ 'titles': 'Faça uma cartela de título e cronometre quanto tempo leva para lê-la duas vezes. Mantenha na tela pelo menos esse tempo.'}
