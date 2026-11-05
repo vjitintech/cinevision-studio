@@ -10,3 +10,4 @@ deploy/secrets/
 *.db-shm
 .env
 frontend/dist-pages/
+.claude/
