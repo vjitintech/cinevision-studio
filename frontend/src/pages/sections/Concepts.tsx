@@ -151,11 +151,16 @@ export const ConceptsSection = {
 const SUGGESTIONS = ["Make the lighting more dramatic", "Move the camera lower", "Create a slower dolly-in", "Give the background more separation",
   "Keep the actor's blocking but change the camera angle", "Create three alternative endings", "Make it achievable with a small production budget"];
 
+type RefineResult = { applied: string[]; unrecognized: string[]; help?: string };
+// survives the panel remounting during a background refresh, so the confirmation isn't lost
+const lastResult = new Map<string, RefineResult>();
+
 function RefinePanel() {
   const ws = useWS();
   const c = ws.concept!;
   const [cmd, setCmd] = useState("");
-  const [result, setResult] = useState<{ applied: string[]; unrecognized: string[]; help?: string } | null>(null);
+  const [result, setResultState] = useState<RefineResult | null>(() => lastResult.get(c.lineage_id) || null);
+  const setResult = (r: RefineResult) => { lastResult.set(c.lineage_id, r); setResultState(r); };
   const [history, setHistory] = useState<Concept[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

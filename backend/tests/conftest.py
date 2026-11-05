@@ -26,9 +26,7 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-@pytest.fixture(scope="session")
-def server(tmp_path_factory):
-    data = tmp_path_factory.mktemp("data")
+def start_server(data: Path):
     port = _free_port()
     key = base64.b64encode(os.urandom(32)).decode()
     env = {**os.environ, "CINEVISION_MASTER_KEY": key, "CINEVISION_DATA_DIR": str(data),
@@ -49,7 +47,13 @@ def server(tmp_path_factory):
     else:
         proc.kill()
         raise RuntimeError((data / "server.log").read_text())
-    yield {"port": port, "data": data, "key": key}
+    return proc, {"port": port, "data": data, "key": key}
+
+
+@pytest.fixture(scope="session")
+def server(tmp_path_factory):
+    proc, info = start_server(tmp_path_factory.mktemp("data"))
+    yield info
     proc.terminate()
     proc.wait(10)
 

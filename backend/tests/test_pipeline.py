@@ -6,7 +6,8 @@ def _ingest(user, clip, title="clip"):
     pid = user.post("/api/projects", {"title": title}).json["id"]
     assert user.upload(pid, clip).status == 201
     jobs = wait_jobs(user, pid)
-    assert {j["kind"] for j in jobs} == {"ingest", "analyze"}, jobs
+    # zero-input flow: analysis is followed automatically by concepts and the director's review
+    assert {j["kind"] for j in jobs} == {"ingest", "analyze", "concepts", "review"}, jobs
     assert all(j["status"] == "completed" for j in jobs), jobs
     return pid
 

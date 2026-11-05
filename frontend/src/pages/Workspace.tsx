@@ -12,13 +12,15 @@ import { StoryboardSection } from "./sections/Storyboard";
 import { PrevisSection } from "./sections/Previs3D";
 import { ShotListSection } from "./sections/ShotList";
 import { SettingsSection } from "./sections/Settings";
+import { ReviewSection } from "./sections/Review";
+import { useT } from "../i18n";
 import { UploadBox } from "./NewProject";
 import { Planner, usePlanner } from "./planner";
 import { subjectOffset, type CameraState } from "../previs/shot";
 import type { Lighting } from "../types";
 
 export const SECTIONS: [string, string][] = [
-  ["analysis", "Video analysis"], ["concepts", "Cinematography concepts"], ["camera", "Camera planner"], ["lighting", "Lighting studio"],
+  ["review", "Director's review"], ["analysis", "Video analysis"], ["concepts", "Cinematography concepts"], ["camera", "Camera planner"], ["lighting", "Lighting studio"],
   ["storyboard", "Storyboard & animatic"], ["previs", "3D previsualisation"], ["shotlist", "Shot list"], ["settings", "Project settings"],
 ];
 
@@ -36,6 +38,7 @@ const Ctx = createContext<WS | null>(null);
 export const useWS = () => useContext(Ctx)!;
 
 export function Workspace({ pid, section }: { pid: string; section: string }) {
+  const { t } = useT();
   const [project, setProject] = useState<Project | null>(null);
   const [analysis, setAnalysis] = useState<any | null>(null);
   const [frames, setFrames] = useState<Frame[]>([]);
@@ -154,16 +157,16 @@ export function Workspace({ pid, section }: { pid: string; section: string }) {
   };
 
   const needsClip = !project.video;
-  const Section = { analysis: AnalysisSection, concepts: ConceptsSection, camera: CameraSection, lighting: LightingSection,
-    storyboard: StoryboardSection, previs: PrevisSection, shotlist: ShotListSection, settings: SettingsSection }[section] || AnalysisSection;
+  const Section = { review: ReviewSection, analysis: AnalysisSection, concepts: ConceptsSection, camera: CameraSection, lighting: LightingSection,
+    storyboard: StoryboardSection, previs: PrevisSection, shotlist: ShotListSection, settings: SettingsSection }[section] || ReviewSection;
 
   return (
     <Ctx.Provider value={ws}>
       <div className="ws">
         <nav className="ws-tabs" aria-label="Project sections">
           <span className="ptitle" title={project.title}>{project.title}</span>
-          {SECTIONS.map(([k, label]) => (
-            <a key={k} {...linkTo(`/p/${pid}/${k}`)} aria-current={section === k ? "page" : undefined}>{label}</a>
+          {SECTIONS.map(([k]) => (
+            <a key={k} {...linkTo(`/p/${pid}/${k}`)} aria-current={section === k ? "page" : undefined}>{t(`sec_${k}` as any)}</a>
           ))}
         </nav>
         <aside className="ws-left" aria-label="Original clip">

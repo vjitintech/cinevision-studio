@@ -42,6 +42,8 @@ def ingest(ctx: jobs.JobContext, params: dict) -> str:
     orig = db.one("SELECT * FROM blobs WHERE id=?", (v["original_blob_id"],))
     db.run("UPDATE uploaded_videos SET status='ingesting' WHERE id=?", (v["id"],))
     ctx.progress(0.05, "Decrypting into private workspace")
+    dur = float(meta["duration_s"])
+    tlimit = max(settings().ffmpeg_timeout_s, int(dur * 3))      # long films need proportionally longer
     with storage.private_tempdir("ingest-") as tmp:
         src = storage.decrypt_to_file(orig, tmp / "source.bin")
         ctx.progress(0.15, "Creating browser preview (H.264)")
@@ -52,20 +54,19 @@ def ingest(ctx: jobs.JobContext, params: dict) -> str:
                   "-t", str(settings().max_duration_s), "-map_metadata", "-1"]
         try:
             _ffmpeg(["-i", f"file:{src}", "-map", "0:v:0", "-map", "0:a:0?", "-vf", vf, *common,
-                     "-c:a", "aac", "-b:a", "128k", f"file:{proxy}"], settings().ffmpeg_timeout_s)
+                     "-c:a", "aac", "-b:a", "128k", f"file:{proxy}"], tlimit)
         except UserFacingError:
             # unusual audio (or a damaged audio track) shouldn't block the picture: retry without sound,
             # and tolerate decode errors in damaged files
             proxy.unlink(missing_ok=True)
             _ffmpeg(["-err_detect", "ignore_err", "-i", f"file:{src}", "-map", "0:v:0", "-an", "-vf", vf, *common,
-                     f"file:{proxy}"], settings().ffmpeg_timeout_s)
+                     f"file:{proxy}"], tlimit)
         ctx.progress(0.6, "Extracting keyframes")
-        dur = float(meta["duration_s"])
         fps = min(2.0, MAX_KEYFRAMES / max(dur, 0.5))
         frames_dir = tmp / "frames"
         frames_dir.mkdir()
         _ffmpeg(["-i", f"file:{proxy}", "-vf", f"fps={fps:.4f},scale=640:-2", "-q:v", "4", "-frames:v", str(MAX_KEYFRAMES),
-                 f"file:{frames_dir}/f_%04d.jpg"], 300)
+                 f"file:{frames_dir}/f_%04d.jpg"], max(300, int(dur)))
         files = sorted(frames_dir.glob("f_*.jpg"))
         if not files:
             raise UserFacingError("No frames could be extracted from the clip.")
@@ -146,7 +147,21 @@ def analyze(ctx: jobs.JobContext, params: dict) -> str:
             c.execute("UPDATE extracted_frames SET is_keyframe=1 WHERE id=(SELECT id FROM extracted_frames WHERE video_id=?"
                       " ORDER BY ABS(t_s-?) LIMIT 1)", (v["id"], sh["representative_t"]))
         c.execute("UPDATE projects SET updated_at=? WHERE id=?", (db.now_iso(), v["project_id"]))
+    _auto_concepts(owner, v["project_id"], aid)
     return aid
+
+
+def _auto_concepts(owner: str, pid: str, analysis_id: str) -> None:
+    """Zero-input flow: as soon as the clip is analysed, generate concepts from the project's brief (defaults if
+    the user gave none). The review job follows the concepts job."""
+    import hashlib
+    proj = db.one("SELECT brief_enc FROM projects WHERE id=?", (pid,))
+    from ..api.projects import CreativeControls
+    controls = keyring().dec_json(proj["brief_enc"], f"projects:brief:{pid}") if proj else None
+    controls = controls or CreativeControls().model_dump()
+    h = hashlib.sha256(json.dumps({"c": controls, "a": analysis_id}, sort_keys=True).encode()).hexdigest()[:24]
+    jobs.enqueue(owner_id=owner, project_id=pid, kind="concepts", idem_key=f"concepts:{pid}:{h}",
+                 params={"controls": controls, "controls_hash": h, "then_review": True})
 
 
 @handler("concepts")
@@ -183,4 +198,75 @@ def concepts(ctx: jobs.JobContext, params: dict) -> str:
                       (cid, owner, pid, row["id"], batch, cid, k.enc_json(con, f"cinematography_concepts:data:{cid}"),
                        eng, db.now_iso()))
         c.execute("UPDATE projects SET updated_at=? WHERE id=?", (db.now_iso(), pid))
+    if params.get("then_review"):
+        enqueue_review(owner, pid, row["id"])
     return batch
+
+
+def enqueue_review(owner: str, pid: str, analysis_id: str, lang: str | None = None, force: bool = False):
+    lang = lang or user_language(owner)
+    key = f"review:{pid}:{analysis_id}:{lang}" + (f":{db.new_id()}" if force else "")
+    return jobs.enqueue(owner_id=owner, project_id=pid, kind="review", idem_key=key, params={"lang": lang})
+
+
+def user_language(uid: str) -> str:
+    r = db.one("SELECT language FROM user_prefs WHERE user_id=?", (uid,))
+    return r["language"] if r else "en"
+
+
+@handler("review")
+def review(ctx: jobs.JobContext, params: dict) -> str:
+    """Director's review: built-in rules always; local AI notes in the user's language when it is switched on."""
+    from ..concepts import assessment as AS
+    from ..director import review as RV
+    owner, pid = ctx.job["owner_id"], ctx.job["project_id"]
+    proj = db.one("SELECT * FROM projects WHERE id=? AND owner_id=?", (pid, owner))
+    if not proj or proj["status"] != "active":
+        raise jobs.Cancelled()
+    row = db.one("SELECT * FROM scene_analyses WHERE project_id=? AND owner_id=?", (pid, owner))
+    if row is None:
+        raise UserFacingError("Analyse the clip before the review.")
+    k = keyring()
+    analysis = k.dec_json(row["data_enc"], f"scene_analyses:data:{row['id']}")
+    ctx.progress(0.1, "Reviewing camera, light, colour and sound")
+    crow = db.all_("SELECT * FROM cinematography_concepts WHERE project_id=? AND owner_id=? AND is_current=1", (pid, owner))
+    latest = db.one("SELECT batch_id FROM cinematography_concepts WHERE project_id=? AND owner_id=? AND revision=1"
+                    " ORDER BY rowid DESC LIMIT 1", (pid, owner))
+    concepts = [{"id": r["id"], "data": k.dec_json(r["data_enc"], f"cinematography_concepts:data:{r['id']}")}
+                for r in crow if latest and r["batch_id"] == latest["batch_id"]]
+    controls = k.dec_json(proj["brief_enc"], f"projects:brief:{pid}") or {}
+    assessment = AS.assess(analysis, concepts, controls) if concepts else None
+    data = RV.build(analysis, assessment)
+    lang = params.get("lang") or "en"
+    existing = db.one("SELECT * FROM director_reviews WHERE project_id=?", (pid,))
+    ai_all = {}
+    if existing and existing["ai_enc"] and existing["analysis_id"] == row["id"]:
+        ai_all = k.dec_json(existing["ai_enc"], f"director_reviews:ai:{existing['id']}") or {}
+    from ..adapters import localai
+    if localai.available(owner):
+        ctx.progress(0.3, "Asking the local AI director for notes (this can take a few minutes)")
+        try:
+            from ..director import ai as AI
+            frames = []
+            v = db.one("SELECT id FROM uploaded_videos WHERE project_id=? ORDER BY created_at DESC LIMIT 1", (pid,))
+            if v:
+                fr = db.all_("SELECT f.blob_id FROM extracted_frames f WHERE f.video_id=? AND f.is_keyframe=1 ORDER BY f.idx",
+                             (v["id"],)) or db.all_("SELECT blob_id FROM extracted_frames WHERE video_id=? ORDER BY idx", (v["id"],))
+                for f in fr[:: max(1, len(fr) // 6)][:6]:
+                    img = cv2.imdecode(np.frombuffer(storage.read_bytes(db.one("SELECT * FROM blobs WHERE id=?",
+                                                                                   (f["blob_id"],))), np.uint8), cv2.IMREAD_COLOR)
+                    if img is not None:
+                        frames.append(img)
+            brief = (controls.get("brief") or "") if isinstance(controls, dict) else ""
+            ai_all[lang] = AI.notes(owner, analysis, data, frames, lang, brief)
+        except Exception as e:  # noqa: BLE001 - AI is an optional layer; never fail the review because of it
+            ai_all[lang] = {"status": "failed", "error": str(e)[:200] if isinstance(e, localai.LocalAIError) else type(e).__name__}
+    ctx.check_cancel()
+    rid = existing["id"] if existing else db.new_id()
+    with db.tx() as c:
+        c.execute("DELETE FROM director_reviews WHERE project_id=?", (pid,))
+        c.execute("INSERT INTO director_reviews(id,owner_id,project_id,analysis_id,data_enc,ai_enc,created_at)"
+                  " VALUES (?,?,?,?,?,?,?)", (rid, owner, pid, row["id"], k.enc_json(data, f"director_reviews:data:{rid}"),
+                                             k.enc_json(ai_all, f"director_reviews:ai:{rid}") if ai_all else None,
+                                             db.now_iso()))
+    return rid

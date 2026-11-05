@@ -8,7 +8,7 @@ from typing import Callable
 import cv2
 import numpy as np
 
-from . import color, composition, environment, motion, narrative, subjects, tag
+from . import audio, color, composition, environment, motion, narrative, subjects, tag, titles
 
 log = logging.getLogger("cinevision.analysis")
 
@@ -36,7 +36,7 @@ def _sample_ffmpeg(path: str, duration: float, fps_target: float, aspect: float)
     res = sandbox.run([s.ffmpeg_bin, "-nostdin", "-hide_banner", "-loglevel", "error", "-protocol_whitelist", "file",
                        "-i", f"file:{path}", "-an", "-vf", f"fps={fps:.4f},scale={SAMPLE_W}:{h}:flags=area",
                        "-frames:v", str(MAX_SAMPLES), "-f", "rawvideo", "-pix_fmt", "bgr24", "pipe:1"],
-                      sandbox.Limits(cpu_s=600, timeout_s=s.ffmpeg_timeout_s))
+                      sandbox.Limits(cpu_s=max(600, int(duration * 4)), timeout_s=max(s.ffmpeg_timeout_s, int(duration * 2))))
     size = SAMPLE_W * h * 3
     if res.returncode != 0 or len(res.stdout) < size:
         raise RuntimeError("ffmpeg sampling failed")
@@ -90,6 +90,35 @@ def _sample_video(path: str, duration: float, fps_target: float, aspect: float,
     except Exception as e:  # noqa: BLE001
         log.warning("keyframe sampling failed: %s", type(e).__name__)
         return [], "none"
+
+
+LONG_CLIP_S = 150          # beyond this, cuts come from FFmpeg's scene detector over every frame
+MAX_DETAILED_SHOTS = 80    # heavy per-shot work (composition, people) on at most this many representative shots
+
+
+def _cuts_ffmpeg(path: str, duration: float) -> list[float]:
+    """Hard cuts over the whole clip with FFmpeg's scene-change detector (every frame, tiny resolution)."""
+    from ..config import settings
+    from ..media import sandbox
+    import re
+    s = settings()
+    res = sandbox.run([s.ffmpeg_bin, "-nostdin", "-hide_banner", "-loglevel", "info", "-protocol_whitelist", "file",
+                       "-i", f"file:{path}", "-an", "-vf", "scale=160:-2,scdet=threshold=12", "-f", "null", "-"],
+                      sandbox.Limits(cpu_s=max(3600, int(duration * 3)), timeout_s=max(300, int(duration * 2))))
+    if res.returncode != 0:
+        raise RuntimeError("scene detection failed")
+    times = sorted(float(x) for x in re.findall(r"lavfi\.scd\.time:\s*([\d.]+)", res.stderr.decode("utf-8", "replace")))
+    cuts, last = [], 0.0
+    for t in times:
+        if t - last >= 0.35 and duration - t >= 0.35:
+            cuts.append(round(t, 3))
+            last = t
+    return cuts
+
+
+def _shots_from_cuts(cuts: list[float], duration: float) -> list[dict]:
+    edges = [0.0, *cuts, duration]
+    return [{"index": i, "start_s": round(a, 3), "end_s": round(b, 3)} for i, (a, b) in enumerate(zip(edges, edges[1:]))]
 
 
 PLACEHOLDER_NOTE = ("Not measured: this part of the analysis failed on this clip, so a neutral placeholder is shown. "
@@ -170,8 +199,12 @@ def run(proxy_path: str, keyframes: list[tuple[float, np.ndarray]], meta: dict,
         raise UserFacingError("No picture could be decoded from this clip, so it can't be analysed. "
                               "Try exporting it again as MP4 (H.264) and uploading that.")
     progress(0.22, "Detecting shot boundaries")
-    shots = guard("shot boundaries", lambda: motion.detect_shots(samples, duration),
-                  lambda: [{"index": 0, "start_s": 0.0, "end_s": duration}])
+    if duration > LONG_CLIP_S:
+        shots = guard("shot boundaries", lambda: _shots_from_cuts(_cuts_ffmpeg(proxy_path, duration), duration),
+                      lambda: motion.detect_shots(samples, duration))
+    else:
+        shots = guard("shot boundaries", lambda: motion.detect_shots(samples, duration),
+                      lambda: [{"index": 0, "start_s": 0.0, "end_s": duration}])
     if not shots:
         shots = [{"index": 0, "start_s": 0.0, "end_s": duration}]
 
@@ -203,7 +236,28 @@ def run(proxy_path: str, keyframes: list[tuple[float, np.ndarray]], meta: dict,
     all_dets = []
     # keyframes to use for subject/composition work: ingest keyframes, else the decoded samples
     frames_for = keyframes or [(s.t, s.bgr_small) for s in samples]
+    if len(shots) > MAX_DETAILED_SHOTS:
+        step = len(shots) / MAX_DETAILED_SHOTS
+        detailed = {int(i * step) for i in range(MAX_DETAILED_SHOTS)}
+    else:
+        detailed = set(range(len(shots)))
+    light_template = None
     for si, sh in enumerate(shots):
+        if si not in detailed:
+            if light_template is None:
+                c0 = composition.analyse_frame(_NEUTRAL)
+                c0.pop("_saliency")
+                light_template = {"shot_size": subjects.shot_size([], 0.3), "composition": c0,
+                                  "subjects": subjects.summarise([{"people": [], "faces": []}])}
+            lt = {k: {**v} if isinstance(v, dict) else v for k, v in _degrade(light_template).items()}
+            mid_t = (sh["start_s"] + sh["end_s"]) / 2
+            per_shot.append({**sh, "representative_t": round(mid_t, 3), **lt,
+                             "camera_angle": tag("undetermined (assume eye level)", 0.0, "estimated", PLACEHOLDER_NOTE),
+                             "camera_height": tag("about eye level", 0.0, "estimated", PLACEHOLDER_NOTE),
+                             "movement": shot_motion[si], "detailed": False,
+                             "scene_geometry": tag({"assumed_hfov_deg": ASSUMED_HFOV_DEG, "subjects_m": []}, 0.0, "estimated",
+                                                   PLACEHOLDER_NOTE)})
+            continue
         kfs = [(t, img) for t, img in frames_for if sh["start_s"] <= t < sh["end_s"]] or \
               [min(frames_for, key=lambda k: abs(k[0] - (sh["start_s"] + sh["end_s"]) / 2))]
         mid = min(kfs, key=lambda k: abs(k[0] - (sh["start_s"] + sh["end_s"]) / 2))
@@ -253,7 +307,14 @@ def run(proxy_path: str, keyframes: list[tuple[float, np.ndarray]], meta: dict,
             "scene_geometry": tag({"assumed_hfov_deg": ASSUMED_HFOV_DEG, "subjects_m": geom}, 0.2, "estimated",
                                   "Rough metres from camera assuming average human size and a ~55° lens. Use for previs only."),
         })
-        progress(0.7 + 0.2 * (si + 1) / len(shots), "Detecting subjects and composition")
+        progress(0.7 + 0.15 * (si + 1) / len(shots), "Detecting subjects and composition")
+
+    progress(0.86, "Listening to the sound")
+    sound = guard("sound", lambda: audio.analyse(proxy_path, duration, bool(meta.get("audio_codec"))),
+                  lambda: {"present": tag(None, 0.0, "observed")})
+    progress(0.89, "Looking for titles and credits")
+    text_frames = [(s.t, s.bgr_small) for s in samples] or [(t, img) for t, img in keyframes]
+    on_screen_text = guard("titles and credits", lambda: titles.detect(text_frames, duration), lambda: tag([], 0.0, "estimated"))
 
     progress(0.92, "Reading environment and mood")
     try:
@@ -283,6 +344,10 @@ def run(proxy_path: str, keyframes: list[tuple[float, np.ndarray]], meta: dict,
     if decoder == "keyframes":
         limitations.append("The clip could only be read through its extracted keyframes, so camera-motion and cut "
                            "detection are coarse.")
+    if len(shots) > MAX_DETAILED_SHOTS:
+        limitations.append(f"This video has {len(shots)} shots; framing and people were analysed in detail on "
+                           f"{MAX_DETAILED_SHOTS} evenly spread representative shots. The others show cut timing and "
+                           "camera movement only.")
     if guard.failed:
         limitations.append("Some parts could not be measured on this clip and show neutral placeholders with zero "
                            "confidence: " + ", ".join(guard.failed) + ".")
@@ -302,5 +367,7 @@ def run(proxy_path: str, keyframes: list[tuple[float, np.ndarray]], meta: dict,
         "environment": env,
         "subjects": overall_subjects,
         "narrative": narr,
+        "sound": sound,
+        "on_screen_text": on_screen_text,
         "limitations": limitations,
     }

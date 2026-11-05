@@ -1,6 +1,7 @@
 import { cloneElement, isValidElement, useEffect, useId, useRef, useState } from "react";
 import type { Job, Tagged } from "../types";
 import { api } from "../api";
+import { useT } from "../i18n";
 
 export function Fact({ label, t, render }: { label: string; t?: Tagged | null; render?: (v: any) => React.ReactNode }) {
   if (!t) return null;
@@ -31,9 +32,9 @@ export function Legend() {
   );
 }
 
-const KIND_LABEL: Record<string, string> = { ingest: "Preparing clip", analyze: "Analysing scene", concepts: "Generating concepts" };
 
 export function JobCard({ job, onChange }: { job: Job; onChange?: () => void }) {
+  const { t } = useT();
   const [busy, setBusy] = useState(false);
   const act = async (what: "retry" | "cancel") => {
     setBusy(true);
@@ -42,7 +43,7 @@ export function JobCard({ job, onChange }: { job: Job; onChange?: () => void }) 
   return (
     <div className="job" role="status">
       <div className="row">
-        <strong className="grow">{KIND_LABEL[job.kind] || job.kind}</strong>
+        <strong className="grow">{t(`job_${job.kind}` as any)}</strong>
         <span className={`status ${job.status === "completed" ? "ready" : job.status === "failed" ? "failed" : job.status === "cancelled" ? "" : "busy"}`}>{job.status}</span>
       </div>
       {(job.status === "processing" || job.status === "queued") && (

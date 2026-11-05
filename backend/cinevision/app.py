@@ -130,12 +130,12 @@ def _maintenance_loop(stop: threading.Event):
 
 
 def create_app() -> Starlette:
-    from .api import account, auth, concepts, exports, projects, videos
+    from .api import account, auth, concepts, director, exports, projects, videos
 
     s = settings()
     db.init_db()
     retention.cleanup_temp()
-    routes = [*auth.routes, *projects.routes, *videos.routes, *account.routes, *concepts.routes, *exports.routes,
+    routes = [*auth.routes, *projects.routes, *videos.routes, *account.routes, *concepts.routes, *exports.routes, *director.routes,
               *_spa_routes()]
     stop = threading.Event()
 

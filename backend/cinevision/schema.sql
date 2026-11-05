@@ -237,3 +237,22 @@ CREATE TABLE IF NOT EXISTS audit_events (
     created_at       TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_audit_user ON audit_events(user_id, created_at);
+
+-- Director's review (language-neutral findings + per-language AI notes)
+CREATE TABLE IF NOT EXISTS director_reviews (
+    id               TEXT PRIMARY KEY,
+    owner_id         TEXT NOT NULL,
+    project_id       TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    analysis_id      TEXT NOT NULL,
+    data_enc         TEXT NOT NULL,
+    ai_enc           TEXT,              -- JSON {lang: notes}, encrypted
+    created_at       TEXT NOT NULL,
+    UNIQUE(project_id)
+);
+
+CREATE TABLE IF NOT EXISTS user_prefs (
+    user_id          TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    language         TEXT NOT NULL DEFAULT 'en'
+);
+
+CREATE TABLE IF NOT EXISTS app_config (key TEXT PRIMARY KEY, value TEXT NOT NULL);

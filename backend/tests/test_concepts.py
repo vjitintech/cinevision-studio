@@ -65,7 +65,7 @@ def test_generation_is_idempotent_for_same_controls(project):
     c.post(f"/api/projects/{pid}/concepts/generate", {"controls": {"genre": "comedy", "concept_count": 3}})
     c.post(f"/api/projects/{pid}/concepts/generate", {"controls": {"genre": "comedy", "concept_count": 3}})
     jobs = wait_jobs(c, pid)
-    assert len([j for j in jobs if j["kind"] == "concepts"]) == 2      # thriller batch + one comedy batch
+    assert len([j for j in jobs if j["kind"] == "concepts"]) == 3      # automatic + thriller + one comedy batch
     assert len(c.get(f"/api/projects/{pid}/concepts").json["concepts"]) == 3
 
 

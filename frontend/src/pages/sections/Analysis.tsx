@@ -93,6 +93,28 @@ export const AnalysisSection = {
           <Fact label="Clipping" t={a.color.clipping} render={(v) => `${(v.highlights * 100).toFixed(1)}% highlights, ${(v.shadows * 100).toFixed(1)}% shadows`} />
         </div>
 
+        {a.sound && (
+          <>
+            <h3>Sound</h3>
+            {a.sound.present?.value === false ? <Fact label="Sound track" t={a.sound.present} render={() => "no sound"} /> : a.sound.loudness ? (
+              <div className="grid3">
+                <Fact label="Loudness" t={a.sound.loudness} render={(v) => `${v.integrated_lufs ?? "—"} LUFS · range ${v.range_lu ?? "—"} LU · peak ${v.true_peak_dbfs ?? "—"} dBFS`} />
+                <Fact label="Clipping" t={a.sound.clipping} render={(v) => (v ? `${v} clipped samples` : "none")} />
+                <Fact label="Silent gaps" t={a.sound.silences} render={(v) => (v.length ? `${v.length} (${Math.round((a.sound.silent_share?.value || 0) * 100)}% of the time)` : "none")} />
+                <Fact label="Background noise" t={a.sound.noise_floor_db} render={(v) => (v == null ? "—" : `${Math.round(v)} dB`)} />
+                {a.sound.content && <Fact label="What it sounds like" t={a.sound.content} render={(v) => v.label} />}
+              </div>
+            ) : <p className="small muted">Sound couldn't be measured on this clip.</p>}
+          </>
+        )}
+        {a.on_screen_text && (
+          <>
+            <h3>Titles, captions and credits</h3>
+            <Fact label="Text on screen" t={a.on_screen_text}
+              render={(v) => (v.length ? v.map((x: any) => `${x.kind} ${fmtTime(x.start_s)}–${fmtTime(x.end_s)}`).join(" · ") : "none found")} />
+          </>
+        )}
+
         <h3>Environment</h3>
         <div className="grid3">
           <Fact label="Setting" t={a.environment.setting} />

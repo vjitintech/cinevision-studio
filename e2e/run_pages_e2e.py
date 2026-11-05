@@ -72,17 +72,18 @@ def main():
 
             # invalid file is rejected with a clear message
             page.get_by_role("button", name="New project").click()
-            page.get_by_label("Project or scene name").fill("Bad file")
-            page.get_by_role("button", name="Create project").click()
+            page.get_by_label("Name of your film or scene").fill("Bad file")
+            page.get_by_role("button", name="Create and upload video").click()
             page.locator('input[type="file"]').set_input_files(str(bad))
             expect(page.get_by_role("alert")).to_contain_text("can't play")
 
             # real flow with a panning shot
             page.goto(base + "#/new")
-            page.get_by_label("Project or scene name").fill("Sc. 3 — Rooftop")
+            page.get_by_label("Name of your film or scene").fill("Sc. 3 — Rooftop")
+            page.get_by_text("Optional: tell the AI what you want").click()      # the brief is optional and folded away
             page.get_by_label("Genre").fill("thriller")
             page.get_by_label("Desired emotion").fill("dread")
-            page.get_by_role("button", name="Create project").click()
+            page.get_by_role("button", name="Create and upload video").click()
             page.locator('input[type="file"]').set_input_files(str(pan))
             page.wait_for_url("**#/p/*/analysis", timeout=60000)
             expect(page.get_by_text("Light and colour")).to_be_visible(timeout=180000)
@@ -141,8 +142,8 @@ def main():
 
             # second clip: two shots detected
             page.goto(base + "#/new")
-            page.get_by_label("Project or scene name").fill("Cut test")
-            page.get_by_role("button", name="Create project").click()
+            page.get_by_label("Name of your film or scene").fill("Cut test")
+            page.get_by_role("button", name="Create and upload video").click()
             page.locator('input[type="file"]').set_input_files(str(cut))
             expect(page.get_by_text("Light and colour")).to_be_visible(timeout=180000)
             expect(page.locator(".fact", has_text="Shots detected").locator(".v")).to_have_text("2")

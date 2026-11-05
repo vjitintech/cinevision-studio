@@ -38,9 +38,9 @@ class Settings:
     cookie_secure: bool = True
     public_origin: str = "https://localhost:8443"
     extra_origins: tuple = ()
-    allow_registration: bool = False          # first user may always register
-    max_upload_bytes: int = 500 * 1024 * 1024
-    max_duration_s: float = 300.0
+    allow_registration: bool = True           # open sign-up (email + password); set false to close it
+    max_upload_bytes: int = 8192 * 1024 * 1024
+    max_duration_s: float = 14400.0
     max_width: int = 4096
     max_height: int = 4096
     min_dimension: int = 64
@@ -101,9 +101,9 @@ def load_settings() -> Settings:
         cookie_secure=_bool("CINEVISION_COOKIE_SECURE", True),
         public_origin=(_env("CINEVISION_PUBLIC_ORIGIN", "https://localhost:8443") or "").rstrip("/"),
         extra_origins=tuple(o.strip().rstrip("/") for o in (_env("CINEVISION_EXTRA_ORIGINS", "") or "").split(",") if o.strip()),
-        allow_registration=_bool("CINEVISION_ALLOW_REGISTRATION", False),
-        max_upload_bytes=_int("CINEVISION_MAX_UPLOAD_MB", 500) * 1024 * 1024,
-        max_duration_s=float(_int("CINEVISION_MAX_DURATION_S", 300)),
+        allow_registration=_bool("CINEVISION_ALLOW_REGISTRATION", True),
+        max_upload_bytes=_int("CINEVISION_MAX_UPLOAD_MB", 8192) * 1024 * 1024,
+        max_duration_s=float(_int("CINEVISION_MAX_DURATION_S", 14400)),
         embedded_worker=_bool("CINEVISION_EMBEDDED_WORKER", False),
         rate_limit_multiplier=max(1, _int("CINEVISION_RATE_LIMIT_MULTIPLIER", 1)),
         trust_proxy=_bool("CINEVISION_TRUST_PROXY", False),
