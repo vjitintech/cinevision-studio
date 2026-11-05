@@ -227,3 +227,18 @@ details[open] > summary { color: var(--text); }
 
 /* letter-spacing breaks joined scripts (Arabic) and Indic conjuncts */
 :lang(ar) *, :lang(hi) *, :lang(te) *, :lang(ta) *, :lang(kn) *, :lang(ml) *, :lang(bn) *, :lang(mr) * { letter-spacing: 0 !important; }
+
+/* Movie assembly */
+.clip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.clip-card { margin: 0; }
+.clip-card .reel-thumb img, .cut .reel-thumb img, .unused .reel-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.clip-card figcaption { display: flex; gap: 6px; align-items: center; margin-top: 4px; overflow: hidden; }
+.clip-card figcaption .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clip-card figcaption button { padding: 0 6px; }
+.cutlist { list-style: none; padding: 0; margin: 0; }
+.cut { padding: 8px 0; }
+.cut .transition { padding: 2px 0 6px 12px; }
+.unused { list-style: none; padding: 0; }
+.assembly textarea { width: 100%; }
+.assembly h2 { margin-top: 28px; }
+.assembly .dropzone { margin-top: 12px; }

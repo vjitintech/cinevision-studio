@@ -147,8 +147,24 @@ def analyze(ctx: jobs.JobContext, params: dict) -> str:
             c.execute("UPDATE extracted_frames SET is_keyframe=1 WHERE id=(SELECT id FROM extracted_frames WHERE video_id=?"
                       " ORDER BY ABS(t_s-?) LIMIT 1)", (v["id"], sh["representative_t"]))
         c.execute("UPDATE projects SET updated_at=? WHERE id=?", (db.now_iso(), v["project_id"]))
-    _auto_concepts(owner, v["project_id"], aid)
+    link = db.one("SELECT assembly_id FROM assembly_clips WHERE clip_project_id=?", (v["project_id"],))
+    if link:
+        _maybe_assemble(owner, link["assembly_id"])      # clips of a movie assembly don't get their own concepts
+    else:
+        _auto_concepts(owner, v["project_id"], aid)
     return aid
+
+
+def _maybe_assemble(owner: str, assembly_id: str) -> None:
+    """When the last clip of an assembly finishes analysis, order the movie automatically."""
+    import hashlib
+    rows = db.all_("SELECT c.clip_project_id, a.id AS aid FROM assembly_clips c LEFT JOIN scene_analyses a"
+                   " ON a.project_id=c.clip_project_id WHERE c.assembly_id=?", (assembly_id,))
+    if not rows or any(r["aid"] is None for r in rows):
+        return
+    h = hashlib.sha256("|".join(sorted(r["aid"] for r in rows)).encode()).hexdigest()[:20]
+    jobs.enqueue(owner_id=owner, project_id=assembly_id, kind="assemble", idem_key=f"assemble:{assembly_id}:{h}",
+                 params={"lang": user_language(owner)})
 
 
 def _auto_concepts(owner: str, pid: str, analysis_id: str) -> None:
@@ -270,3 +286,54 @@ def review(ctx: jobs.JobContext, params: dict) -> str:
                                              k.enc_json(ai_all, f"director_reviews:ai:{rid}") if ai_all else None,
                                              db.now_iso()))
     return rid
+
+
+@handler("assemble")
+def assemble(ctx: jobs.JobContext, params: dict) -> str:
+    """Order the clips of a movie assembly and flag misfits (rules always; local AI as an extra opinion)."""
+    from ..assembly import engine as AE
+    from ..concepts import assessment as AS
+    owner, aid = ctx.job["owner_id"], ctx.job["project_id"]
+    host = db.one("SELECT status FROM projects WHERE id=? AND owner_id=?", (aid, owner))
+    if not host or host["status"] != "active":
+        raise jobs.Cancelled()
+    k = keyring()
+    arow = db.one("SELECT * FROM assemblies WHERE project_id=?", (aid,))
+    script = k.dec(arow["script_enc"], f"assemblies:script:{aid}") if arow and arow["script_enc"] else ""
+    clips = []
+    rows = db.all_("SELECT c.clip_project_id FROM assembly_clips c JOIN projects p ON p.id=c.clip_project_id"
+                   " WHERE c.assembly_id=? AND p.status='active'", (aid,))
+    ctx.progress(0.1, "Reading the clip analyses")
+    for r in rows:
+        pid = r["clip_project_id"]
+        an = db.one("SELECT * FROM scene_analyses WHERE project_id=?", (pid,))
+        v = db.one("SELECT * FROM uploaded_videos WHERE project_id=?", (pid,))
+        if an is None or v is None:
+            continue
+        analysis = k.dec_json(an["data_enc"], f"scene_analyses:data:{an['id']}")
+        meta = dict(db.one("SELECT * FROM video_metadata WHERE video_id=?", (v["id"],)) or {})
+        name = k.dec(v["filename_enc"], f"uploaded_videos:filename:{v['id']}")
+        clips.append({"id": pid, "name": name, "analysis": analysis, "meta": meta,
+                      "issues": AS.technical_checks(analysis, {})})
+    if not clips:
+        raise UserFacingError("Upload and analyse at least one clip first.")
+    ctx.progress(0.4, "Matching clips to the story")
+    data = AE.assemble(clips, script)
+    lang = params.get("lang") or "en"
+    ai_all = {}
+    from ..adapters import localai
+    if localai.available(owner):
+        ctx.progress(0.6, "Asking the local AI editor for its order (this can take a few minutes)")
+        try:
+            from ..assembly import ai as AAI
+            ai_all[lang] = AAI.order(owner, clips, data, script, lang)
+        except Exception as e:  # noqa: BLE001 - optional layer
+            ai_all[lang] = {"status": "failed", "error": str(e)[:200] if isinstance(e, localai.LocalAIError) else type(e).__name__}
+    ctx.check_cancel()
+    with db.tx() as c:
+        c.execute("DELETE FROM assembly_results WHERE assembly_id=?", (aid,))
+        c.execute("INSERT INTO assembly_results(assembly_id,owner_id,data_enc,ai_enc,created_at) VALUES (?,?,?,?,?)",
+                  (aid, owner, k.enc_json(data, f"assembly_results:data:{aid}"),
+                   k.enc_json(ai_all, f"assembly_results:ai:{aid}") if ai_all else None, db.now_iso()))
+        c.execute("UPDATE projects SET updated_at=? WHERE id=?", (db.now_iso(), aid))
+    return aid

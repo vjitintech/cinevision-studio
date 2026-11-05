@@ -256,3 +256,25 @@ CREATE TABLE IF NOT EXISTS user_prefs (
 );
 
 CREATE TABLE IF NOT EXISTS app_config (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+
+-- Movie assembly: a hidden host project (for jobs) + many hidden clip projects
+CREATE TABLE IF NOT EXISTS assemblies (
+    project_id       TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+    owner_id         TEXT NOT NULL,
+    script_enc       TEXT,
+    created_at       TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS assembly_clips (
+    clip_project_id  TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+    assembly_id      TEXT NOT NULL REFERENCES assemblies(project_id) ON DELETE CASCADE,
+    owner_id         TEXT NOT NULL,
+    created_at       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_assembly_clips ON assembly_clips(assembly_id);
+CREATE TABLE IF NOT EXISTS assembly_results (
+    assembly_id      TEXT PRIMARY KEY REFERENCES assemblies(project_id) ON DELETE CASCADE,
+    owner_id         TEXT NOT NULL,
+    data_enc         TEXT NOT NULL,
+    ai_enc           TEXT,
+    created_at       TEXT NOT NULL
+);

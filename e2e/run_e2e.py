@@ -27,6 +27,23 @@ def free_port():
         return s.getsockname()[1]
 
 
+def assembly_clips(d: Path) -> list[Path]:
+    """Title card, two scenes cut from the sample footage, end credits (shuffled file order on upload)."""
+    src = Path(__file__).resolve().parents[1] / "samples" / "sample-two-shots.mp4"
+    card = ("drawtext=text='{t}':fontcolor=white:fontsize=64:x=(w-tw)/2:y=280,"
+            "drawtext=text='{s}':fontcolor=white:fontsize=36:x=(w-tw)/2:y=400,"
+            "drawtext=text='Music by Another Person':fontcolor=white:fontsize=36:x=(w-tw)/2:y=460")
+    run = lambda *a: subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *a], check=True)  # noqa: E731
+    out = [d / "A001_titles.mp4", d / "A002_rocket.mp4", d / "A003_astronaut.mp4", d / "Z999_credits.mp4"]
+    run("-f", "lavfi", "-i", "color=black:s=1280x720:d=3:r=24", "-vf", card.format(t="LAUNCH DAY", s="A film by Someone"),
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", str(out[0]))
+    run("-ss", "3.1", "-i", str(src), "-c:v", "libx264", "-pix_fmt", "yuv420p", str(out[1]))
+    run("-i", str(src), "-t", "2.9", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(out[2]))
+    run("-f", "lavfi", "-i", "color=black:s=1280x720:d=3:r=24", "-vf", card.format(t="THE END", s="Directed by Name Surname"),
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", str(out[3]))
+    return [out[3], out[2], out[0], out[1]]
+
+
 def demo_clip(path: Path) -> Path:
     """A slow push-in on a still with a person in it (no audio)."""
     src = None
@@ -73,6 +90,7 @@ def main():
             ctx = b.new_context(viewport={"width": 1500, "height": 950}, accept_downloads=True)
             page = ctx.new_page()
             page.on("console", lambda m: errors.append(f"console.{m.type}: {m.text}") if m.type in ("error",) else None)
+            page.on("response", lambda r: errors.append(f"http {r.status}: {r.request.method} {r.url.split('?')[0]}") if (r.status == 404 or r.status >= 500 or (r.status == 409 and "ai-preview" not in r.url)) else None)
             page.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
             page.set_default_timeout(30000)
 
@@ -189,6 +207,27 @@ def main():
             page.get_by_label("Type the project name to confirm").fill("Sc. 14 — Launch pad, day")
             page.get_by_role("button", name="Delete project permanently").click()
             expect(page.get_by_text("No projects yet")).to_be_visible()
+            # movie assembly: many clips + a short screenplay → ordered cut with reasons
+            page.get_by_role("link", name="Movie assembly").click()
+            page.get_by_label("Name of the film").fill("Launch day")
+            page.get_by_label("Story, scene description or screenplay (optional)").fill(
+                "Opening titles.\nEXT. LAUNCH PAD - DAY. The rocket stands in the sun.\nINT. CREW ROOM - DAY. The astronaut sits alone, quiet.\nEnd credits.")
+            page.get_by_role("button", name="Create and add clips").click()
+            page.wait_for_url("**/a/*")
+            page.locator('input[type="file"][multiple]').set_input_files([str(p) for p in assembly_clips(data)])
+            expect(page.locator(".clip-card")).to_have_count(4, timeout=60000)
+            expect(page.locator("ol.cutlist > li")).to_have_count(4, timeout=240000)
+            order = page.locator("ol.cutlist h4").all_inner_texts()
+            print("assembly order:", order)
+            assert order[0].endswith("A001_titles.mp4") and order[-1].endswith("Z999_credits.mp4"), order
+            time.sleep(1)
+            page.screenshot(path=shots / "11b-assembly.png", full_page=True)
+            page.get_by_role("link", name="Private dashboard").click()
+            expect(page.locator(".reel")).to_have_count(1)                       # only the assembly; its clips are inside it
+            page.locator(".reel a.title").click()
+            page.get_by_role("button", name="Delete assembly").click()
+            page.get_by_role("button", name="Click again to delete everything").click()
+            expect(page.get_by_text("No projects yet")).to_be_visible()          # assembly + every clip deleted
             # mobile layout sanity
             page.set_viewport_size({"width": 390, "height": 844})
             page.screenshot(path=shots / "12-mobile-dashboard.png")

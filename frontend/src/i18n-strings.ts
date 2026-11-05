@@ -31,6 +31,15 @@ const EN = {
     settings_ai: "Free local AI", settings_ai_intro: "CineVision works without AI. With a free local AI model on this computer it also judges story, performance and style. Your video never leaves this computer.",
     enable_ai: "Use local AI", ai_server: "AI server address", ai_model_text: "Text model (director brain)", ai_model_vision: "Vision model (looks at frames)",
     auto: "automatic", save: "Save", test_connection: "Save and test", your_computer: "Your computer", recommended: "Recommended for this computer",
+    asm_title: "Movie assembly", asm_intro: "Upload all your clips (up to hundreds) and, if you like, describe the story or paste your screenplay. CineVision puts the clips in story order like an experienced editor, explains each placement, suggests cuts and transitions, and sets aside clips that don't fit.",
+    asm_name: "Name of the film", asm_script: "Story, scene description or screenplay (optional)",
+    asm_script_hint: "One line per moment, or paste a screenplay with INT./EXT. scene headings. Mention place, day/night, action and feelings — that's what clips are matched on.",
+    asm_create: "Create and add clips", asm_drop: "Drop all your clips here", asm_drop_hint: "Select many files at once · up to {n} clips · uploaded one by one, then analysed automatically",
+    asm_clips: "Clips ({done} of {n} analysed)", asm_remove: "Remove", asm_order: "Order my movie", asm_result: "Suggested cut — {n} clips, {time}",
+    asm_use: "use {a}–{b}", asm_unused: "Not used ({n}) — and why", asm_ai_order: "AI editor's order", asm_ai_unused: "The AI would leave out",
+    asm_ai_off: "Local AI can also read any-language descriptions and judge story.", asm_beats: "Your description, split into {n} parts",
+    asm_delete: "Delete assembly", asm_delete_confirm: "Click again to delete everything", asm_full_only: "Movie assembly runs in the full (self-hosted) edition.",
+    job_assemble: "Ordering the movie", dash_new_assembly: "New movie assembly", dash_assembly: "Movie assembly · {n} clips",
     how_to_install: "How to install colibri (free)", only_owner: "Only the first account (the owner) can change AI settings.",
   };
 

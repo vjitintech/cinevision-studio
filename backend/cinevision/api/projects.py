@@ -80,10 +80,16 @@ def project_detail(ctx, pid: str) -> dict:
 
 async def list_projects(request: Request):
     ctx = current(request)
-    rows = db.all_("SELECT * FROM projects WHERE owner_id=? AND status='active' ORDER BY updated_at DESC", (ctx.uid,))
+    # clips inside a movie assembly are listed in their assembly, not on the dashboard
+    rows = db.all_("SELECT p.*, (SELECT COUNT(*) FROM assemblies a WHERE a.project_id=p.id) AS is_assembly,"
+                   " (SELECT COUNT(*) FROM assembly_clips c WHERE c.assembly_id=p.id) AS clip_count FROM projects p"
+                   " WHERE p.owner_id=? AND p.status='active' AND NOT EXISTS"
+                   " (SELECT 1 FROM assembly_clips c WHERE c.clip_project_id=p.id) ORDER BY p.updated_at DESC", (ctx.uid,))
     out = []
     for r in rows:
         p = _project_public(dict(r))
+        p["kind"] = "assembly" if r["is_assembly"] else "scene"
+        p["clip_count"] = r["clip_count"]
         v = db.one("SELECT status FROM uploaded_videos WHERE project_id=?", (r["id"],))
         p["video_status"] = v["status"] if v else None
         p["concept_count"] = db.one("SELECT COUNT(*) n FROM cinematography_concepts WHERE project_id=? AND is_current=1",
@@ -95,7 +101,7 @@ async def list_projects(request: Request):
 async def create_project(request: Request):
     ctx = current(request)
     body = await parse(request, ProjectCreate)
-    if db.one("SELECT COUNT(*) n FROM projects WHERE owner_id=?", (ctx.uid,))["n"] >= 500:
+    if db.one("SELECT COUNT(*) n FROM projects WHERE owner_id=?", (ctx.uid,))["n"] >= 5000:
         raise ApiError(429, "too_many_projects", "Project limit reached.")
     pid = db.new_id()
     k = keyring()

@@ -54,3 +54,13 @@ def test_vocabulary_aligned_and_applied():
     assert _tr_value("medium close-up", "es") == "primer plano medio"          # longest term wins over "medium"
     assert _tr_value("zoom in ×2, pan right", "de") == "Zoom rein ×2, Schwenk nach rechts"
     assert _tr_value("long take / unhurried, very still", "hi") == "लंबा टेक / इत्मीनान, बहुत स्थिर"
+
+
+
+@pytest.mark.parametrize("lang", OTHER)
+def test_assembly_text_complete(lang):
+    mod = importlib.import_module(f"cinevision.director.i18n.{lang}")
+    assert set(mod.ASSEMBLY) == set(en.ASSEMBLY), lang
+    for k, v in en.ASSEMBLY.items():
+        assert mod.ASSEMBLY[k].strip() and set(PH.findall(mod.ASSEMBLY[k])) == set(PH.findall(v)), (lang, k)
+    assert set(mod.CUES) == set(en.CUES) and all(mod.CUES.values())

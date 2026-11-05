@@ -186,3 +186,37 @@ EDIT_STEPS = {
     "vertical_len": "Keep it to 15–30 s and put the hook in the first 2 s.",
     "captions": "Add burned-in captions: most phone viewers watch with sound off.",
 }
+
+ASSEMBLY = {
+    # why a clip is placed here
+    "titles_first": "Opening titles — placed first.",
+    "credits_last": "End credits — placed last.",
+    "beat_match": "Matches part {beat} of your description ({cues}).",
+    "no_beat_kept": "Fits the film's look but no specific part of the description; kept in camera order.",
+    "scene_group": "Same place, time and look as scene {scene}.",
+    "size_progression": "Closer than the previous shot: wide → close builds intimacy.",
+    # why a clip doesn't fit
+    "no_match": "Doesn't match any part of your description.",
+    "duplicate": "Looks like another take of “{other}”, which is cleaner. Use one of them.",
+    "look_aspect": "Different frame shape ({aspect}:1, the rest are {majority}:1).",
+    "look_fps": "Different frame rate ({fps} fps, the rest are {majority} fps); motion will look different.",
+    "look_resolution": "Much lower resolution ({height}p, the rest are {majority}p).",
+    "look_exposure": "Much brighter or darker than the rest (brightness {pct}%); grade it to match.",
+    "technical": "Technical problem: {issue}",
+    "too_short": "Too short to use ({secs} s).",
+    # transitions
+    "fade_in": "Fade in from black",
+    "fade_out": "Fade out to black",
+    "cut": "Straight cut",
+    "cut_new_scene": "Cut — new place",
+    "dissolve": "Dissolve — time has passed",
+    "match_cut": "Match cut — same framing, new shot size",
+    "jcut": "Let the dialogue start before the picture (J-cut)",
+    # notes
+    "beats_uncovered": "No clip matches part(s) {beats} of your description — shoot or find footage for them.",
+    "script_no_cues": "Your description has no words the analyser recognises (place, time, action, people, shot size). Turn on local AI for any language and freer descriptions.",
+    "no_script": "No scene description given: clips are grouped by place and look and kept in camera order. Add a description for story order.",
+}
+
+CUES = {w: w for w in ("indoor", "outdoor", "night", "day", "dawn", "dusk", "fast", "still", "crowd", "alone", "person",
+                       "close", "wide", "sad", "tense", "warm", "titles", "credits")}

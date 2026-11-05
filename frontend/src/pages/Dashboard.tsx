@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { linkTo, navigate } from "../router";
 import { ErrorNote } from "../components/common";
+import { useT } from "../i18n";
 
-interface Row { id: string; title: string; updated_at: string; video_status: string | null; concept_count: number }
+interface Row { id: string; title: string; updated_at: string; video_status: string | null; concept_count: number; kind?: string; clip_count?: number }
 
 function Thumb({ pid, ready }: { pid: string; ready: boolean }) {
   const [src, setSrc] = useState<string | null>(null);
@@ -22,6 +23,7 @@ const STATUS: Record<string, [string, string]> = {
 };
 
 export function Dashboard() {
+  const { t } = useT();
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => { api("GET", "/api/projects").then((r) => setRows(r.projects)).catch((e) => setError(e.message)); }, []);
@@ -32,7 +34,10 @@ export function Dashboard() {
           <h1>Your projects</h1>
           <p className="muted">Only you can see these. Nothing here has a public link.</p>
         </div>
-        <button className="primary" onClick={() => navigate("/new")}>New project</button>
+        <div className="row">
+          {__EDITION__ !== "browser" && <button onClick={() => navigate("/assembly/new")}>{t("dash_new_assembly")}</button>}
+          <button className="primary" onClick={() => navigate("/new")}>{t("nav_new")}</button>
+        </div>
       </div>
       <ErrorNote error={error} />
       {rows && rows.length === 0 && (
@@ -43,6 +48,19 @@ export function Dashboard() {
       )}
       <div>
         {rows?.map((p) => {
+          if (p.kind === "assembly") {
+            return (
+              <div className="reel" key={p.id}>
+                <div className="reel-thumb">🎞</div>
+                <div>
+                  <h3><a className="title" {...linkTo(`/a/${p.id}`)}>{p.title}</a></h3>
+                  <div className="row small"><span className="muted">{t("dash_assembly", { n: p.clip_count || 0 })}</span>
+                    <span className="faint">Updated {new Date(p.updated_at).toLocaleString()}</span></div>
+                </div>
+                <a {...linkTo(`/a/${p.id}`)}>Open</a>
+              </div>
+            );
+          }
           const [cls, label] = p.video_status ? (STATUS[p.video_status] || ["", p.video_status]) : ["", "No clip"];
           return (
             <div className="reel" key={p.id}>

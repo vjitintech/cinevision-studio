@@ -27,7 +27,8 @@ LANGUAGES = {
 def pack(lang: str) -> dict:
     from .. import texts as en
     base = {"SUMMARY": {"text": en.SUMMARY}, "DEPARTMENTS": en.DEPARTMENTS, "STATUS": en.STATUS, "VERDICT": en.VERDICT, "FINDINGS": en.FINDINGS,
-            "PACE_ADVICE": en.PACE_ADVICE, "EDIT_OPTIONS": en.EDIT_OPTIONS, "EDIT_STEPS": en.EDIT_STEPS}
+            "PACE_ADVICE": en.PACE_ADVICE, "EDIT_OPTIONS": en.EDIT_OPTIONS, "EDIT_STEPS": en.EDIT_STEPS,
+            "ASSEMBLY": en.ASSEMBLY, "CUES": en.CUES}
     if lang == "en" or lang not in LANGUAGES:
         return base
     try:

@@ -58,3 +58,27 @@ def render(review: dict, lang: str) -> dict:
             "verdict_label": P["VERDICT"].get(review["verdict"], ""), "summary": _fmt(P["SUMMARY"]["text"], counts),
             "counts": counts, "departments": deps, "edit_options": edits,
             "alternatives": review.get("alternatives", [])}
+
+
+def render_assembly(data: dict, lang: str) -> dict:
+    lang = lang if lang in LANGUAGES else "en"
+    P = pack(lang)
+    A, C = P["ASSEMBLY"], P["CUES"]
+
+    def params(x):
+        p = dict(x.get("params", {}))
+        if isinstance(p.get("cues"), str):
+            p["cues"] = ", ".join(C.get(c.strip(), c.strip()) for c in p["cues"].split(",") if c.strip())
+        return p
+
+    def txt(items):
+        return [{**x, "text": _fmt(A.get(x["code"], x["code"]), params(x))} for x in items]
+    seq = []
+    for s in data["sequence"]:
+        seq.append({**s, "reasons": txt(s["reasons"]), "flags": txt(s["flags"]),
+                    "transition_label": A.get(s["transition"], s["transition"]),
+                    "transition_extra_label": A.get(s["transition_extra"]) if s.get("transition_extra") else None,
+                    "transition_out_label": A.get(s["transition_out"]) if s.get("transition_out") else None})
+    return {"language": lang, "rtl": bool(LANGUAGES[lang].get("rtl")), "beats": data["beats"], "sequence": seq,
+            "rejected": [{**r, "flags": txt(r["flags"])} for r in data["rejected"]], "notes": txt(data["notes"]),
+            "runtime_s": data["runtime_s"], "clip_count": data["clip_count"]}
