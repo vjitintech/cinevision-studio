@@ -40,9 +40,15 @@ if (-not (Test-Path ".venv\Scripts\python.exe")) {
   if ($LASTEXITCODE -ne 0) { Remove-Item -Recurse -Force .venv; Fail "Installing Python packages failed (see the messages above). Fix the problem and run this script again." }
 }
 
-# --- build the web interface ---
-if (-not (Test-Path "frontend\dist\index.html")) {
-  Write-Host "Building the web interface (first run only)..."
+# --- build the web interface (first run, and again whenever the source changed, e.g. after git pull) ---
+$needBuild = -not (Test-Path "frontend\dist\index.html")
+if (-not $needBuild) {
+  $built = (Get-Item "frontend\dist\index.html").LastWriteTime
+  $newest = (Get-ChildItem -Recurse -File "frontend\src", "frontend\build.mjs", "frontend\package.json" | Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime
+  $needBuild = $newest -gt $built
+}
+if ($needBuild) {
+  Write-Host "Building the web interface..."
   Push-Location frontend
   npm install --no-audit --no-fund
   if ($LASTEXITCODE -ne 0) { Pop-Location; Fail "npm install failed (see the messages above)." }

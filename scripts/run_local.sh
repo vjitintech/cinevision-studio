@@ -5,7 +5,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -f deploy/secrets/master_key ] || python3 scripts/gen_keys.py deploy/secrets
 if [ ! -d .venv ]; then python3 -m venv .venv; .venv/bin/pip install -q -r backend/requirements.txt; fi
-if [ ! -d frontend/dist ]; then (cd frontend && npm install --no-audit --no-fund && npm run build); fi
+# build the UI on first run, and again whenever the source changed (e.g. after git pull)
+if [ ! -f frontend/dist/index.html ] || [ -n "$(find frontend/src frontend/build.mjs frontend/package.json -newer frontend/dist/index.html -print -quit)" ]; then
+  (cd frontend && npm install --no-audit --no-fund && npm run build)
+fi
 export CINEVISION_MASTER_KEY_FILE="$PWD/deploy/secrets/master_key"
 export CINEVISION_DATA_DIR="${CINEVISION_DATA_DIR:-$PWD/data}"
 export CINEVISION_PUBLIC_ORIGIN="http://127.0.0.1:8000"
