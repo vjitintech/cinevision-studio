@@ -77,6 +77,9 @@ export function App() {
           <a {...linkTo("/security")} aria-current={path === "/security" ? "page" : undefined}>{t("nav_security")}</a>
         </nav>
         <div className="grow" />
+        <select className="lang-pick" aria-label={t("language")} value={lang} onChange={(e) => setLang(e.target.value)}>
+          {LANGS.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}
+        </select>
         {session.mode === "browser" ? (
           <span className="small muted" title="Everything runs inside this browser tab and is stored only on this device">Browser edition · stays on this device</span>
         ) : (
@@ -84,9 +87,6 @@ export function App() {
             <span className="small muted" title={session.mode === "local" ? "Everything runs on this machine" : "Private server"}>
               {session.mode === "local" ? "Local mode" : "Private server"} · {session.user?.email}
             </span>
-            <select className="lang-pick" aria-label={t("language")} value={lang} onChange={(e) => setLang(e.target.value)}>
-              {LANGS.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}
-            </select>
             <button className="ghost" onClick={logout}>{t("sign_out")}</button>
           </>
         )}

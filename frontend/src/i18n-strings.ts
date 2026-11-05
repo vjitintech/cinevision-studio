@@ -1,6 +1,8 @@
-// App labels. English is the source; other languages are added per key and fall back to English.
-export const UI = {
-  en: {
+// App labels. English is the source; translations live in i18n-ui.json (checked by backend/tests/test_i18n.py)
+// and any missing key falls back to English.
+import more from "./i18n-ui.json";
+
+const EN = {
     nav_dashboard: "Private dashboard", nav_new: "New project", nav_assembly: "Movie assembly", nav_learn: "Learn directing",
     nav_settings: "AI & language", nav_security: "Security & privacy", sign_out: "Sign out", language: "Language",
     sec_review: "Director's review", sec_analysis: "Video analysis", sec_concepts: "Cinematography concepts",
@@ -30,5 +32,6 @@ export const UI = {
     enable_ai: "Use local AI", ai_server: "AI server address", ai_model_text: "Text model (director brain)", ai_model_vision: "Vision model (looks at frames)",
     auto: "automatic", save: "Save", test_connection: "Save and test", your_computer: "Your computer", recommended: "Recommended for this computer",
     how_to_install: "How to install colibri (free)", only_owner: "Only the first account (the owner) can change AI settings.",
-  },
-};
+  };
+
+export const UI: { en: typeof EN } & Record<string, Partial<typeof EN>> = { en: EN, ...(more as Record<string, Partial<typeof EN>>) };

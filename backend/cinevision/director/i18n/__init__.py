@@ -35,8 +35,10 @@ def pack(lang: str) -> dict:
     except ModuleNotFoundError:
         return base
     out = {}
+    tuples = getattr(mod, "F", {})
+    findings_tr = {code: {k: v for k, v in zip(("obs", "sug", "why"), t) if v} for code, t in tuples.items()}
     for k, v in base.items():
-        tr = getattr(mod, k, {})
+        tr = findings_tr if k == "FINDINGS" else getattr(mod, k, {})
         if k == "FINDINGS":
             out[k] = {code: {**v[code], **tr.get(code, {})} for code in v}
         elif k == "EDIT_OPTIONS":

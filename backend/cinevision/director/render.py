@@ -1,7 +1,25 @@
 """Turn a stored review (codes + params) into text in the requested language."""
 from __future__ import annotations
 
+import re
+
 from .i18n import LANGUAGES, pack
+from .i18n import vocab
+
+# params whose values are analysis vocabulary (translated term by term); others are numbers, colours or shot lists
+VOCAB_PARAMS = {"mood", "pacing", "moves", "size", "sizes", "placement", "key", "contrast", "cast", "label"}
+_PATTERNS: dict[str, tuple] = {}
+
+
+def _tr_value(v, lang: str):
+    if lang == "en" or lang not in vocab.V or not isinstance(v, str):
+        return v
+    if lang not in _PATTERNS:
+        pairs = sorted(zip(vocab.TERMS, vocab.V[lang]), key=lambda p: -len(p[0]))
+        rx = re.compile("|".join(r"(?<![\w-])" + re.escape(t) + r"(?![\w-])" for t, _ in pairs))
+        _PATTERNS[lang] = (rx, dict(pairs))
+    rx, table = _PATTERNS[lang]
+    return rx.sub(lambda m: table[m.group(0)], v)
 
 
 class _Safe(dict):
@@ -21,7 +39,7 @@ def render(review: dict, lang: str) -> dict:
         items = []
         for f in d["findings"]:
             tpl = P["FINDINGS"].get(f["code"], {})
-            params = dict(f["params"])
+            params = {k: (_tr_value(v, lang) if k in VOCAB_PARAMS else v) for k, v in f["params"].items()}
             if "advice_key" in params:
                 params["advice"] = P["PACE_ADVICE"].get(params["advice_key"], "")
             items.append({**f, "observation": _fmt(tpl.get("obs"), params), "suggestion": _fmt(tpl.get("sug"), params),
