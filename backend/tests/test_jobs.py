@@ -63,3 +63,35 @@ def test_cancel_and_stale_requeue(env):
     db.run("UPDATE render_jobs SET heartbeat_at=? WHERE id=?", ("2000-01-01T00:00:00+00:00", j2["id"]))
     assert jobs.requeue_stale() == 1
     assert db.one("SELECT status FROM render_jobs WHERE id=?", (j2["id"],))["status"] == "queued"
+
+
+def test_worker_pool_runs_jobs_in_parallel(env):
+    """CINEVISION_WORKERS > 1: several clip analyses run at once instead of queueing behind each other."""
+    import threading
+    import time
+    from cinevision import worker
+    uid, pid = env
+    active, peak, done, lock = [0], [0], [], threading.Lock()
+
+    def slow(ctx, params):
+        with lock:
+            active[0] += 1
+            peak[0] = max(peak[0], active[0])
+        time.sleep(0.6)
+        with lock:
+            active[0] -= 1
+            done.append(ctx.wid)
+        return None
+    worker.HANDLERS["slow"] = slow
+    for i in range(3):
+        jobs.enqueue(owner_id=uid, project_id=pid, kind="slow", idem_key=f"slow:{i}")
+    stop = threading.Event()
+    t = threading.Thread(target=worker.run_forever, kwargs={"stop": stop, "poll_s": 0.05, "workers": 3}, daemon=True)
+    t.start()
+    end = time.time() + 15
+    while len(done) < 3 and time.time() < end:
+        time.sleep(0.05)
+    stop.set()
+    t.join(10)
+    worker.HANDLERS.pop("slow", None)
+    assert len(done) == 3 and peak[0] >= 2 and len(set(done)) >= 2

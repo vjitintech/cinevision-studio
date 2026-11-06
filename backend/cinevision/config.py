@@ -49,6 +49,7 @@ class Settings:
     session_idle_minutes: int = 120
     session_absolute_hours: int = 12
     embedded_worker: bool = False
+    workers: int = 1                          # parallel job threads per worker process (CINEVISION_WORKERS)
     rate_limit_multiplier: int = 1             # tests only; keep 1 in real deployments
     trust_proxy: bool = False                 # honour X-Forwarded-For (only behind the bundled Caddy)
     ffmpeg_bin: str = "ffmpeg"
@@ -105,6 +106,7 @@ def load_settings() -> Settings:
         max_upload_bytes=_int("CINEVISION_MAX_UPLOAD_MB", 8192) * 1024 * 1024,
         max_duration_s=float(_int("CINEVISION_MAX_DURATION_S", 14400)),
         embedded_worker=_bool("CINEVISION_EMBEDDED_WORKER", False),
+        workers=max(1, min(16, _int("CINEVISION_WORKERS", min(4, max(1, (os.cpu_count() or 2) // 2))))),
         rate_limit_multiplier=max(1, _int("CINEVISION_RATE_LIMIT_MULTIPLIER", 1)),
         trust_proxy=_bool("CINEVISION_TRUST_PROXY", False),
         ffmpeg_bin=_env("CINEVISION_FFMPEG", "ffmpeg"),

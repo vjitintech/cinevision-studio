@@ -62,15 +62,11 @@ def run_one(wid: str) -> bool:
     return True
 
 
-def run_forever(stop: threading.Event | None = None, poll_s: float = 0.5) -> None:
-    _load_handlers()
-    db.init_db()
-    wid = jobs.worker_id()
+def _loop(wid: str, stop: threading.Event | None, poll_s: float, sweeper: bool) -> None:
     last_sweep = 0.0
-    log.info("worker %s started", wid)
     while not (stop and stop.is_set()):
         try:
-            if time.monotonic() - last_sweep > 30:
+            if sweeper and time.monotonic() - last_sweep > 30:
                 jobs.requeue_stale()
                 last_sweep = time.monotonic()
             if not run_one(wid):
@@ -79,6 +75,24 @@ def run_forever(stop: threading.Event | None = None, poll_s: float = 0.5) -> Non
             log.exception("worker loop error")
             time.sleep(2)
     db.close_thread_connection()
+
+
+def run_forever(stop: threading.Event | None = None, poll_s: float = 0.5, workers: int | None = None) -> None:
+    """Run the job loop. With CINEVISION_WORKERS > 1 (default: half the CPU cores, at most 4) several jobs run at
+    once — e.g. many clip analyses of a movie assembly — each thread with its own DB connection and worker id."""
+    from .config import settings
+    _load_handlers()
+    db.init_db()
+    n = max(1, workers if workers is not None else getattr(settings(), "workers", 1))
+    base = jobs.worker_id()
+    helpers = [threading.Thread(target=_loop, args=(f"{base}:t{i}", stop, poll_s, False), daemon=True, name=f"worker-{i}")
+               for i in range(1, n)]
+    for t in helpers:
+        t.start()
+    log.info("worker %s started with %d thread(s)", base, n)
+    _loop(base, stop, poll_s, True)
+    for t in helpers:
+        t.join(timeout=5)
 
 
 if __name__ == "__main__":  # pragma: no cover

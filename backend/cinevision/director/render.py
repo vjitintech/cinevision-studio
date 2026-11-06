@@ -82,3 +82,30 @@ def render_assembly(data: dict, lang: str) -> dict:
     return {"language": lang, "rtl": bool(LANGUAGES[lang].get("rtl")), "beats": data["beats"], "sequence": seq,
             "rejected": [{**r, "flags": txt(r["flags"])} for r in data["rejected"]], "notes": txt(data["notes"]),
             "runtime_s": data["runtime_s"], "clip_count": data["clip_count"]}
+
+
+def render_assembly_order(data: dict, lang: str) -> dict:
+    """The owner's own order (assembly.engine.check_order): its sequence like render_assembly, plus each continuity
+    note with its reason (text), its suggested fix (fix_text) and, for a set-aside clip, why (because_text)."""
+    lang = lang if lang in LANGUAGES else "en"
+    P = pack(lang)
+    A, C = P["ASSEMBLY"], P["CUES"]
+    base = render_assembly({"beats": [], "sequence": data.get("sequence", []), "rejected": [], "notes": [],
+                            "runtime_s": data.get("runtime_s", 0), "clip_count": len(data.get("order", []))}, lang)
+
+    def params(p):
+        p = dict(p or {})
+        for k in ("time_a", "time_b"):
+            if isinstance(p.get(k), str):
+                p[k] = C.get(p[k], p[k])
+        return p
+    notes = []
+    for n in data.get("notes", []):
+        item = {**n, "text": _fmt(A.get(n["code"], n["code"]), params(n.get("params")))}
+        if n.get("fix"):
+            item["fix_text"] = _fmt(A.get(n["fix"]["code"], n["fix"]["code"]), params(n["fix"].get("params")))
+        if n.get("because"):
+            item["because_text"] = _fmt(A.get(n["because"]["code"], n["because"]["code"]), params(n["because"].get("params")))
+        notes.append(item)
+    return {"language": lang, "rtl": base["rtl"], "sequence": base["sequence"], "runtime_s": data.get("runtime_s", 0),
+            "notes": notes}

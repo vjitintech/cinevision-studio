@@ -57,7 +57,8 @@ class CineVision:
         self.csrf: str | None = None
         self.signed_in = False
 
-    def _req(self, method: str, path: str, body=None, raw: bytes | None = None, ctype: str | None = None, timeout=600):
+    def _req(self, method: str, path: str, body=None, raw: bytes | None = None, ctype: str | None = None, timeout=600,
+             text: bool = False):
         headers = {"Origin": self.origin}
         data = raw
         if body is not None:
@@ -71,6 +72,8 @@ class CineVision:
         try:
             with self.opener.open(req, timeout=timeout) as r:
                 txt = r.read()
+                if text:                                  # downloads (EDL): plain text back to the assistant
+                    return txt.decode("utf-8", "replace")
                 out = json.loads(txt) if txt and "json" in (r.headers.get("Content-Type") or "") else {}
         except urllib.error.HTTPError as e:
             try:
@@ -171,6 +174,20 @@ TOOLS = [
          "paths": {"type": "array", "items": {"type": "string"}, "description": "Absolute paths of the clips"},
          "title": {"type": "string"}, "story": {"type": "string", "description": "Scene description or screenplay"},
          "language": {"type": "string", "enum": LANGS}}}},
+    {"name": "export_timeline", "description": "The movie's cut as a CMX3600 EDL (text) for DaVinci Resolve, Premiere Pro, Avid or Final "
+     "Cut: original file names, frame-accurate in/out points, cuts, dissolves and fades. Use order='mine' for the order set with "
+     "reorder_movie. Only names and timecodes are returned, never footage.",
+     "inputSchema": {"type": "object", "required": ["assembly_id"], "properties": {
+         "assembly_id": {"type": "string"},
+         "order": {"type": "string", "enum": ["suggested", "mine"], "description": "suggested cut (default) or your own order"}}}},
+    {"name": "reorder_movie", "description": "Set your own clip order for a movie assembly and check it: returns continuity notes "
+     "(day/night or inside/outside jumps within a scene, frame-shape or frame-rate clashes, duplicate takes, order against the story, "
+     "titles not first, credits not last), each with what to do.",
+     "inputSchema": {"type": "object", "required": ["assembly_id", "order"], "properties": {
+         "assembly_id": {"type": "string"},
+         "order": {"type": "array", "items": {"type": "string"}, "description": "Clip file names (or clip ids) in playing order"},
+         "excluded": {"type": "array", "items": {"type": "string"}, "description": "Clips to leave out (default: every clip not in order)"},
+         "language": {"type": "string", "enum": LANGS}}}},
 ]
 
 
@@ -230,6 +247,31 @@ def run_tool(cv: CineVision, name: str, a: dict):
                 "not_used": [{"clip": x["name"], "why": [f["text"] for f in x["flags"]]} for x in r.get("rejected", [])],
                 "notes": [n["text"] for n in r.get("notes", [])],
                 "ai_editor": res.get("ai") if res.get("ai") and res["ai"].get("status") == "used" else None}
+    if name == "export_timeline":
+        which = a.get("order") or "suggested"
+        if which not in ("suggested", "mine"):
+            raise ToolError("order must be 'suggested' or 'mine'.")
+        return {"format": "CMX3600 EDL", "order": which,
+                "edl": cv.call("GET", f"/api/assemblies/{a['assembly_id']}/export?format=edl&order={which}", text=True)}
+    if name == "reorder_movie":
+        aid = a["assembly_id"]
+        clips = cv.call("GET", f"/api/assemblies/{aid}")["clips"]
+        ids = {c["clip_id"]: c["clip_id"] for c in clips}
+        ids.update({c["name"]: c["clip_id"] for c in clips if c.get("name")})
+
+        def resolve(x):
+            if x not in ids:
+                raise ToolError(f"No clip called '{x}' in this movie. Clips: " + ", ".join(c["name"] or c["clip_id"] for c in clips))
+            return ids[x]
+        order = [resolve(x) for x in a.get("order") or []]
+        excluded = [resolve(x) for x in a["excluded"]] if a.get("excluded") is not None else \
+            [c["clip_id"] for c in clips if c["clip_id"] not in order]
+        mine = cv.call("PUT", f"/api/assemblies/{aid}/order",
+                       {"clips": order, "excluded": excluded, **({"lang": lang} if lang in LANGS else {})})["mine"]
+        return {"assembly_id": aid, "runtime_s": mine.get("runtime_s"),
+                "order": [{"position": s["position"], "clip": s["name"], "transition_in": s["transition_label"]} for s in mine["sequence"]],
+                "notes": [{"problem": n["text"] + (" " + n["because_text"] if n.get("because_text") else ""),
+                           "fix": n.get("fix_text"), "positions": n["positions"], "severity": n["severity"]} for n in mine["notes"]]}
     raise ToolError(f"Unknown tool {name}")
 
 
