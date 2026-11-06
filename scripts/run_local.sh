@@ -4,7 +4,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -f deploy/secrets/master_key ] || python3 scripts/gen_keys.py deploy/secrets
-if [ ! -d .venv ]; then python3 -m venv .venv; .venv/bin/pip install -q -r backend/requirements.txt; fi
+if [ ! -d .venv ]; then python3 -m venv .venv; fi
+# (re)install packages when backend/requirements.txt changed, e.g. after git pull
+REQ_HASH=$(sha256sum backend/requirements.txt 2>/dev/null || shasum -a 256 backend/requirements.txt); REQ_HASH=${REQ_HASH%% *}
+if [ "$(cat .venv/requirements.sha256 2>/dev/null)" != "$REQ_HASH" ]; then
+  .venv/bin/pip uninstall -y -q opencv-python-headless opencv-python >/dev/null 2>&1 || true   # contrib build provides cv2
+  .venv/bin/pip install -q -r backend/requirements.txt && echo "$REQ_HASH" > .venv/requirements.sha256
+fi
 # build the UI on first run, and again whenever the source changed (e.g. after git pull)
 if [ ! -f frontend/dist/index.html ] || [ -n "$(find frontend/src frontend/build.mjs frontend/package.json -newer frontend/dist/index.html -print -quit)" ]; then
   (cd frontend && npm install --no-audit --no-fund && npm run build)

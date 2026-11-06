@@ -40,6 +40,18 @@ if (-not (Test-Path ".venv\Scripts\python.exe")) {
   if ($LASTEXITCODE -ne 0) { Remove-Item -Recurse -Force .venv; Fail "Installing Python packages failed (see the messages above). Fix the problem and run this script again." }
 }
 
+# --- Update Python packages when backend\requirements.txt changed (e.g. after git pull) ---
+$reqHash = (Get-FileHash backend\requirements.txt -Algorithm SHA256).Hash
+$stamp = ".venv\requirements.sha256"
+if (-not (Test-Path $stamp) -or (Get-Content $stamp -Raw).Trim() -ne $reqHash) {
+  Write-Host "Updating Python packages for this version..."
+  # The plain and contrib OpenCV builds both provide 'cv2'; only the contrib build may stay.
+  & .venv\Scripts\python.exe -m pip uninstall -y -q opencv-python-headless opencv-python 2>$null | Out-Null
+  & .venv\Scripts\python.exe -m pip install -q -r backend\requirements.txt
+  if ($LASTEXITCODE -ne 0) { Fail "Updating Python packages failed (see the messages above). Run this script again." }
+  Set-Content -Path $stamp -Value $reqHash -Encoding ascii
+}
+
 # --- build the web interface (first run, and again whenever the source changed, e.g. after git pull) ---
 $needBuild = -not (Test-Path "frontend\dist\index.html")
 if (-not $needBuild) {
