@@ -44,6 +44,35 @@ export function NewAssembly() {
 interface QueueItem { id: string; name: string; progress: number; state: "waiting" | "uploading" | "retrying" | "done" | "failed"; error?: string }
 interface Clip { clip_id: string; name: string | null; status: string; thumb: string | null; meta: any; job: any }
 
+/** Seconds until a signed media URL ("/api/media/<id>?t=<exp>.<sig>") expires; 0 if it can't be read. */
+function urlLife(u: string | null | undefined): number {
+  const m = /[?&]t=(\d+)\./.exec(u || "");
+  return m ? Number(m[1]) - Date.now() / 1000 : 0;
+}
+
+/** Keep the thumbnail URL we already show while it is valid for another minute. Every poll signs fresh URLs, and a
+ *  changed src makes the browser download every thumbnail again (300 clips × a poll every 2.5 s would trip the
+ *  server's rate limit). */
+export function keepThumbs(prev: Clip[] | undefined, next: Clip[]): Clip[] {
+  if (!prev) return next;
+  const old = new Map(prev.map((c) => [c.clip_id, c.thumb]));
+  return next.map((c) => {
+    const o = old.get(c.clip_id);
+    return o && c.thumb && o.split("?")[0] === c.thumb.split("?")[0] && urlLife(o) > 60 ? { ...c, thumb: o } : c;
+  });
+}
+
+/** Wait (briefly) until no thumbnail on the page is still downloading, so deleting the clips can't pull the
+ *  files away from under requests that are already on their way. */
+function thumbsSettled(maxMs = 4000): Promise<void> {
+  const pending = Array.from(document.querySelectorAll<HTMLImageElement>(".assembly img")).filter((i) => !i.complete);
+  if (!pending.length) return Promise.resolve();
+  return Promise.race([
+    Promise.all(pending.map((i) => new Promise<void>((r) => { i.addEventListener("load", () => r(), { once: true }); i.addEventListener("error", () => r(), { once: true }); }))).then(() => undefined),
+    new Promise<void>((r) => setTimeout(r, maxMs)),
+  ]);
+}
+
 export function AssemblyPage({ aid }: { aid: string }) {
   const { t, lang } = useT();
   const [a, setA] = useState<any>(null);
@@ -51,16 +80,26 @@ export function AssemblyPage({ aid }: { aid: string }) {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [script, setScript] = useState<string | null>(null);
   const [over, setOver] = useState(false);
+  // clips being removed (hidden at once) and whether the whole assembly is being deleted (no more polling)
+  const [removing, setRemoving] = useState<Set<string>>(() => new Set());
+  const [deleting, setDeleting] = useState(false);
+  const gen = useRef(0);          // bumped when a delete starts: a load that began earlier is stale and is dropped
   const input = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
-    try { const r = await api("GET", `/api/assemblies/${aid}?lang=${lang}`); setA(r); setScript((s) => (s === null ? r.script : s)); }
-    catch (e) { setError(e instanceof ApiError && e.status === 404 ? "This assembly doesn't exist or isn't yours." : "Could not load it."); }
+    const g = gen.current;
+    try {
+      const r = await api("GET", `/api/assemblies/${aid}?lang=${lang}`);
+      if (g !== gen.current) return;
+      setA((prev: any) => ({ ...r, clips: keepThumbs(prev?.clips, r.clips) }));
+      setScript((s) => (s === null ? r.script : s));
+    }
+    catch (e) { if (g === gen.current) setError(e instanceof ApiError && e.status === 404 ? "This assembly doesn't exist or isn't yours." : "Could not load it."); }
   }, [aid, lang]);
   useEffect(() => { load(); }, [load]);
   const busyClips = a?.clips.some((c: Clip) => c.status !== "analysed" && c.status !== "failed" && c.job?.status !== "failed");
   const busyJob = a?.jobs.some((j: any) => j.status === "queued" || j.status === "processing");
-  usePoll(load, !!a && (busyClips || busyJob || queue.some((q) => q.state !== "done" && q.state !== "failed")), 2500);
+  usePoll(load, !!a && !deleting && (busyClips || busyJob || queue.some((q) => q.state !== "done" && q.state !== "failed")), 2500);
 
   const addFiles = async (files: File[]) => {
     const items = files.filter((f) => /\.(mp4|mov|m4v|mkv|webm|avi)$/i.test(f.name))
@@ -97,8 +136,24 @@ export function AssemblyPage({ aid }: { aid: string }) {
   };
   const saveScript = async () => { await api("PATCH", `/api/assemblies/${aid}`, { script: script || "" }); await order(); };
   const order = async () => { try { await api("POST", `/api/assemblies/${aid}/assemble`, { lang }); await load(); } catch (e) { setError(e instanceof ApiError ? e.message : "Failed."); } };
-  const removeClip = async (cid: string) => { await api("DELETE", `/api/assemblies/${aid}/clips/${cid}`); load(); };
-  const removeAll = async () => { if (confirmDelete()) { await api("DELETE", `/api/assemblies/${aid}`); navigate("/"); } };
+  const removeClip = async (cid: string) => {
+    gen.current++;
+    setRemoving((s) => new Set(s).add(cid));             // hide it (and its thumbnails) straight away
+    await thumbsSettled();
+    try { await api("DELETE", `/api/assemblies/${aid}/clips/${cid}`); }
+    catch (e) { setError(e instanceof ApiError ? e.message : "Could not remove the clip."); }
+    gen.current++;
+    await load();
+    setRemoving((s) => { const n = new Set(s); n.delete(cid); return n; });
+  };
+  const removeAll = async () => {
+    if (!confirmDelete()) return;
+    gen.current++;
+    setDeleting(true);                                    // stops polling; nothing new is requested
+    await thumbsSettled();
+    try { await api("DELETE", `/api/assemblies/${aid}`); navigate("/"); }
+    catch (e) { setDeleting(false); setError(e instanceof ApiError ? e.message : "Could not delete it."); }
+  };
   const [confirming, setConfirming] = useState(false);
   const confirmDelete = () => { if (!confirming) { setConfirming(true); return false; } return true; };
 
@@ -106,7 +161,7 @@ export function AssemblyPage({ aid }: { aid: string }) {
   if (error && !a) return <div className="page"><ErrorNote error={error} /><a {...linkTo("/")}>{t("nav_dashboard")}</a></div>;
   if (!a) return <div className="empty">…</div>;
   const r = a.result;
-  const thumbOf = (id: string) => a.clips.find((c: Clip) => c.clip_id === id)?.thumb;
+  const thumbOf = (id: string) => (deleting || removing.has(id) ? null : a.clips.find((c: Clip) => c.clip_id === id)?.thumb);
   const analysed = a.clips.filter((c: Clip) => c.status === "analysed").length;
   const job = a.jobs.find((j: any) => j.kind === "assemble" && (j.status === "queued" || j.status === "processing"));
 
@@ -141,9 +196,9 @@ export function AssemblyPage({ aid }: { aid: string }) {
 
       <h2>{t("asm_clips", { n: a.clips.length, done: analysed })}</h2>
       <div className="clip-grid">
-        {a.clips.map((c: Clip) => (
+        {a.clips.filter((c: Clip) => !removing.has(c.clip_id)).map((c: Clip) => (
           <figure key={c.clip_id} className="clip-card">
-            <div className="reel-thumb" style={{ width: "100%" }}>{c.thumb ? <img src={c.thumb} alt="" /> : c.status}</div>
+            <div className="reel-thumb" style={{ width: "100%" }}>{thumbOf(c.clip_id) ? <img src={thumbOf(c.clip_id)!} alt="" /> : c.status}</div>
             <figcaption className="small"><span className="grow" title={c.name || ""}>{c.name}</span>
               <span className={`status ${c.status === "analysed" ? "ready" : c.status === "failed" || c.job?.status === "failed" ? "failed" : "busy"}`} />
               <button className="ghost" aria-label={`${t("asm_remove")} ${c.name}`} onClick={() => removeClip(c.clip_id)}>×</button></figcaption>
@@ -191,7 +246,8 @@ export function AssemblyPage({ aid }: { aid: string }) {
                 </li>))}</ul>
             </>
           )}
-          <MyOrder aid={aid} a={a} r={r} onSaved={load} />
+          <MyOrder aid={aid} r={r} onSaved={load}
+            a={deleting || removing.size ? { ...a, clips: a.clips.map((c: Clip) => ({ ...c, thumb: thumbOf(c.clip_id) || null })) } : a} />
           {a.ai?.status === "used" && (
             <section className="concept ai-notes">
               <h3 style={{ marginTop: 0 }}>{t("asm_ai_order")} <span className="small faint">{a.ai.model}</span></h3>

@@ -197,7 +197,7 @@ def to_fcpxml(tl: dict) -> str:
         audio = ' hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000"' if c["audio"] else ""
         res.append(f'    <asset id="{aid}" name={quoteattr(c["name"])} start="0s" duration="{_t(c["total"], rate)}" hasVideo="1" '
                    f'format="{formats[(c["width"], c["height"])]}" videoSources="1"{audio}>\n'
-                   f'      <media-rep kind="original-media" src={quoteattr("./" + quote(c["name"]))}/>\n    </asset>')
+                   f'      <media-rep kind="original-media" src={quoteattr("./" + quote(c["name"], safe=""))}/>\n    </asset>')
 
     def transition(offset, dur):
         return (f'          <transition name="Cross Dissolve" offset="{_t(offset, rate)}" duration="{_t(dur, rate)}">\n'

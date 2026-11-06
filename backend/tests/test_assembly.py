@@ -332,3 +332,42 @@ def test_timeline_export_edl_and_fcpxml_are_frame_accurate():
     assert len(root.findall(".//spine/transition")) == 3                       # fade in, dissolve, fade out
     for a in root.findall("./resources/asset"):
         assert a.find("media-rep").get("kind") == "original-media"
+
+
+def test_timeline_names_cannot_inject_lines_or_paths():
+    from cinevision.assembly import timeline as TL
+    import xml.etree.ElementTree as ET
+    e = {"fps": 25, "width": 1280, "height": 720, "duration_s": 3, "in_s": 0, "out_s": 3, "transition": "cut"}
+    tl = TL.build([{**e, "name": 'a"\n002  EVIL V C 00:00:00:00\r<x>&.mp4'}, {**e, "name": "../../etc/passwd"}],
+                  'T"\n</event><evil/>')
+    edl = TL.to_edl(tl)
+    assert sum(line[:3].isdigit() for line in edl.splitlines()) == 2                 # one event line per clip
+    root = ET.fromstring(TL.to_fcpxml(tl).split("\n", 2)[2])
+    srcs = [m.get("src") for m in root.iter("media-rep")]
+    assert all(s.startswith("./") and "/" not in s[2:] for s in srcs), srcs           # media stays next to the XML
+    assert root.find(".//event").get("name").startswith('T"')
+
+
+def test_assembly_takes_more_than_20_clips_an_hour(tmp_path_factory):
+    """Real rate limits (multiplier 1): single projects keep 20 uploads an hour, but an assembly's clips don't
+    share that budget, otherwise clip 21 of a 300-clip movie is refused (and the page then deletes it)."""
+    from conftest import start_server, stop_server
+    d = tmp_path_factory.mktemp("asm_rate")
+    clip = d / "c.mp4"
+    _ff("-f", "lavfi", "-i", "color=gray:s=320x180:d=1:r=24", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(clip))
+    proc, info = start_server(d, {"CINEVISION_RATE_LIMIT_MULTIPLIER": "1", "CINEVISION_EMBEDDED_WORKER": "false"})
+    try:
+        c = Client(info["port"])
+        assert c.post("/api/auth/register", {"email": "big@example.test", "password": PASSWORD}).status == 201
+        aid = c.post("/api/assemblies", {"title": "Feature"}).json["id"]
+        for i in range(25):
+            cid = c.post(f"/api/assemblies/{aid}/clips", {"filename": f"S{i:03d}.mp4"}).json["clip_id"]
+            r = c.upload(cid, clip, f"S{i:03d}.mp4")
+            assert r.status == 201, (i, r.status, r.json)
+        statuses = []
+        for i in range(21):                                  # single projects: still 20 an hour
+            pid = c.post("/api/projects", {"title": f"P{i}"}).json["id"]
+            statuses.append(c.upload(pid, clip).status)
+        assert statuses[:20] == [201] * 20 and statuses[20] == 429, statuses
+    finally:
+        stop_server(proc)

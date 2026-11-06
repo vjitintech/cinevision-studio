@@ -136,6 +136,34 @@ def test_titles_are_read_and_too_short_cards_flagged():
     assert "titles.too_short_to_read" in codes and "titles.read" in codes
 
 
+def test_one_and_two_line_title_cards_are_found():
+    # the most common cards: "THE END" alone, or a title + a "directed by" line, on a plain background
+    for lines in (["THE END"], ["THE LONG ROAD HOME", "directed by Asha Rao"]):
+        r = titles.detect(_samples(_card(lines), 3), 3, frame_at=lambda t, lines=lines: _card(lines))
+        assert r["value"] and r["value"][0]["kind"] == "opening titles", lines
+
+
+def test_busy_frames_with_few_text_like_blobs_are_not_titles(monkeypatch):
+    # two short dark bars on a textured photo-like frame (eyes, a mug rim) are not a title card without OCR
+    monkeypatch.setattr(titles, "_tess", {"available": False, "path": None, "version": None, "languages": []})
+    rng = np.random.default_rng(3)
+    img = cv2.resize(rng.integers(60, 200, (9, 16, 3), dtype=np.uint8), (1280, 720), interpolation=cv2.INTER_CUBIC)
+    cv2.rectangle(img, (500, 300), (620, 330), (20, 20, 20), -1)
+    cv2.rectangle(img, (680, 300), (800, 330), (20, 20, 20), -1)
+    assert titles.detect(_samples(img, 3), 3, frame_at=lambda t: img)["value"] == []
+
+
+@pytest.mark.skipif(not titles.ocr_engine()["available"], reason="tesseract not installed")
+def test_text_like_regions_ocr_cannot_read_are_dropped():
+    # three wide blobs that pass the region test but contain no letters: with OCR installed they're not titles,
+    # so no "low contrast" / "outside title-safe" findings appear on a shot that has no text
+    img = np.full((720, 1280, 3), 110, np.uint8)
+    for i in range(3):
+        cv2.rectangle(img, (6, 30 + i * 70), (500, 60 + i * 70), (150, 150, 150), 3)
+    r = titles.detect(_samples(img, 3), 30, frame_at=lambda t: img)
+    assert r["value"] == []
+
+
 def test_text_reading_missing_degrades(monkeypatch):
     monkeypatch.setattr(titles, "_tess", {"available": False, "path": None, "version": None, "languages": []})
     big = _card(["OPENING TITLE", "a film by someone", "another line here"])
