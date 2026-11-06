@@ -28,6 +28,7 @@ READ_WPS = 2.5                # comfortable reading speed for on-screen text, wo
 NOTICE_S = 1.0                # time to notice a new card before reading starts
 LOW_CONTRAST = 3.0            # below 3:1 large text is hard to read (WCAG 2 AA, large text)
 MAX_OCR_SEGMENTS = 40
+MIN_READ_CONF = 0.65          # mean Tesseract word confidence below this is noise read from a non-text region
 WINDOWS_TESSERACT = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 NOT_AVAILABLE = "text reading not available — install Tesseract to enable"
 
@@ -56,12 +57,27 @@ def text_boxes(bgr: np.ndarray) -> list[tuple[int, int, int, int]]:
     return out
 
 
+CARD_FLAT_STD = 12.0          # grey-level spread outside the text below which the frame is a plain title card
+
+
+def _plain_card(img: np.ndarray, boxes) -> bool:
+    """True when everything outside the text boxes is (nearly) one flat tone: a one- or two-line title card such as
+    'THE END' or a title + 'directed by' line, which has too few text lines for the busy-frame rule."""
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
+    keep = np.ones(gray.shape, bool)
+    for x, y, bw, bh in boxes:
+        p = max(2, bh)
+        keep[max(0, y - p):y + bh + p, max(0, x - p):x + bw + p] = False
+    rest = gray[keep]
+    return rest.size > gray.size * 0.5 and float(rest.std()) < CARD_FLAT_STD
+
+
 def frame_hit(t: float, img: np.ndarray):
     """One sampled frame → (t, normalised boxes, all-in-lower-band) when it looks like a text frame, else None."""
     boxes = text_boxes(img)
     h, w = img.shape[:2]
     lower = [b for b in boxes if b[1] > h * 0.72]
-    if len(boxes) >= 3 or (len(boxes) >= 1 and len(lower) == len(boxes)):
+    if len(boxes) >= 3 or (len(boxes) >= 1 and len(lower) == len(boxes)) or (boxes and _plain_card(img, boxes)):
         nb = [(x / w, y / h, bw / w, bh / h) for x, y, bw, bh in boxes]
         return (t, nb, len(lower) == len(boxes))
     return None
@@ -270,6 +286,7 @@ def detect_from_hits(hits: list, step: float, duration: float, frame_at: Callabl
     order = sorted(range(len(segs)), key=lambda i: (segs[i]["kind"] not in ("opening titles", "end credits"),
                                                      -segs[i]["on_screen_s"]))[:MAX_OCR_SEGMENTS]
     read_n = 0
+    not_text: set[int] = set()
     for i, s in enumerate(segs):
         t, boxes = s.pop("_best")
         s["best_t"] = round(t, 2)
@@ -290,11 +307,17 @@ def detect_from_hits(hits: list, step: float, duration: float, frame_at: Callabl
             continue
         if langs and i in order:
             got = read_text(_crop(img, ub), langs)
+            if not got or got[1] < MIN_READ_CONF:
+                # OCR is installed and finds no legible words here: the "text" was a face, a pattern or a texture
+                # (eyes, brows, a mug's rim). Reporting it would give title findings on a shot with no titles.
+                not_text.add(i)
+                continue
             if got:
                 text, conf = got
                 words = len(re.findall(r"\w+", text))
                 s.update(text=text, words=words, read_confidence=round(conf, 2), needed_s=needed_seconds(words))
                 read_n += 1
+    segs = [s for i, s in enumerate(segs) if i not in not_text]
     if eng["available"]:
         note = (f"Text-like regions found in sampled frames; the words were read on this computer with Tesseract OCR "
                 f"({langs}). Stylised fonts, motion blur and busy backgrounds can be misread.")
