@@ -91,7 +91,7 @@ def main():
             ctx = b.new_context(viewport={"width": 1500, "height": 950}, accept_downloads=True)
             page = ctx.new_page()
             page.on("console", lambda m: errors.append(f"console.{m.type}: {m.text}") if m.type in ("error",) else None)
-            page.on("response", lambda r: errors.append(f"http {r.status}: {r.request.method} {r.url.split('?')[0]}") if (r.status == 404 or r.status >= 500 or (r.status == 409 and "ai-preview" not in r.url)) else None)
+            page.on("response", lambda r: errors.append(f"http {r.status}: {r.request.method} {r.url.split('?')[0]} (on {page.url.split('?')[0]})") if (r.status == 404 or r.status >= 500 or (r.status == 409 and "ai-preview" not in r.url)) else None)
             page.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
             page.set_default_timeout(30000)
 
