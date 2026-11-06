@@ -44,7 +44,20 @@ const EN = {
     learn_title: "Learn directing", learn_intro: "Short lessons on each craft — what to watch for, why it matters, and what to do. Every lesson is the same reasoning the Director's review uses on your videos, so you learn from your own footage.",
     learn_focus: "Practise next (from your videos):", learn_none: "Upload a video to see which lessons matter most for your work.",
     learn_exercise: "Exercise:", learn_symptom: "You'll notice", learn_why: "Why it matters:", learn_do: "What to do:", learn_seen: "seen {n}× in your videos",
-    how_to_install: "How to install colibri (free)", only_owner: "Only the first account (the owner) can change AI settings.",
+    how_to_install: "How to install colibri (free)", only_owner: "Only the owner or an admin can change AI settings.",
+    auth_first_owner: "The first account becomes the owner of this CineVision.", auth_invite: "Invite code",
+    auth_invite_hint: "Ask the owner of this CineVision for a code.", auth_closed: "New accounts can't be created on this CineVision. Ask its owner.",
+    pw_rule_length: "At least 12 characters. A short sentence works well.", pw_rule_email: "Doesn't contain your email name",
+    sec_exposed_title: "Other computers can reach this CineVision",
+    sec_exposed_body: "It listens on {host} over plain http, and anyone who can open it can create an account. To keep it on this computer, start it without CINEVISION_HOST (or set CINEVISION_HOST=127.0.0.1). To allow only invited people, set CINEVISION_SIGNUP=owner_only.",
+    sec_accounts: "Accounts and sign-up", sec_signup: "Sign-up: {mode}", sec_you_are: "Your role: {role}",
+    signup_open: "open: anyone who can open this page can create an account", signup_owner_only: "invite only: new people need an invite code",
+    signup_closed: "closed: no new accounts", role_owner: "owner", role_admin: "admin", role_member: "member",
+    sec_admin_help: "Admins can change the AI settings and create invite codes. Only the owner chooses admins.",
+    sec_make_admin: "Make admin", sec_remove_admin: "Remove admin", sec_new_invite: "Create an invite code",
+    sec_invite_once: "Give this code to the person you invite. It works once, for 7 days, and is not shown again:",
+    sec_invite_open_note: "Sign-up is open, so invite codes are not needed. They matter when CINEVISION_SIGNUP=owner_only.",
+    sec_invites: "Invite codes", invite_unused: "not used yet", invite_used: "used", invite_expired: "expired", sec_remove: "Remove",
   };
 
 export const UI: { en: typeof EN } & Record<string, Partial<typeof EN>> = { en: EN, ...(more as Record<string, Partial<typeof EN>>) };

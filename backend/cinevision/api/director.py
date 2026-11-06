@@ -123,8 +123,8 @@ async def put_prefs(request: Request):
 
 # ---------------------------------------------------------------- local AI
 def _is_owner(uid: str) -> bool:
-    first = db.one("SELECT id FROM users ORDER BY created_at, rowid LIMIT 1")
-    return bool(first and first["id"] == uid)
+    from ..roles import is_admin  # the owner or an admin the owner appointed
+    return is_admin(uid)
 
 
 async def get_local_ai(request: Request):
@@ -145,7 +145,7 @@ class LocalAIBody(BaseModel):
 async def put_local_ai(request: Request):
     ctx = current(request)
     if not _is_owner(ctx.uid):
-        raise ApiError(403, "forbidden", "Only the first (owner) account can change the AI settings.")
+        raise ApiError(403, "forbidden", "Only the owner or an admin can change the AI settings.")
     body = await parse(request, LocalAIBody)
     try:
         localai.set_config(body.model_dump())

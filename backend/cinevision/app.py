@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import hmac
-import os
 import logging
+import sys
 import threading
 import time
 from pathlib import Path
@@ -14,7 +14,7 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from . import db, retention, security
+from . import db, retention, roles, security
 from .config import settings
 from .web import ApiError
 
@@ -129,14 +129,27 @@ def _maintenance_loop(stop: threading.Event):
             log.exception("maintenance failed")
 
 
+def print_startup_warnings() -> list[str]:
+    """Loud console warning when the server is reachable from other computers (see roles.startup_warnings)."""
+    warnings = roles.startup_warnings()
+    if warnings:
+        bar = "!" * 78
+        lines = ["", bar, "  WARNING - CineVision is reachable from your network", bar,
+                 *("  * " + w for w in warnings), bar, ""]
+        print("\n".join(lines), file=sys.stderr, flush=True)
+    return warnings
+
+
 def create_app() -> Starlette:
-    from .api import account, assembly, auth, concepts, director, exports, projects, videos
+    from .api import account, admin, assembly, auth, concepts, director, exports, projects, videos
 
     s = settings()
     db.init_db()
+    roles.ensure_schema()
     retention.cleanup_temp()
+    print_startup_warnings()
     routes = [*auth.routes, *projects.routes, *videos.routes, *account.routes, *concepts.routes, *exports.routes, *director.routes, *assembly.routes,
-              *_spa_routes()]
+              *admin.routes, *_spa_routes()]
     stop = threading.Event()
 
     async def lifespan(app):
@@ -158,8 +171,8 @@ def create_app() -> Starlette:
 def main():  # pragma: no cover
     import uvicorn
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    uvicorn.run("cinevision.app:create_app", factory=True, host=os.environ.get("CINEVISION_HOST", "127.0.0.1"),
-                port=int(os.environ.get("CINEVISION_PORT", "8000")), access_log=False,
+    s = settings()  # host defaults to 127.0.0.1: only this computer can connect unless CINEVISION_HOST says otherwise
+    uvicorn.run("cinevision.app:create_app", factory=True, host=s.host, port=s.port, access_log=False,
                 proxy_headers=False, server_header=False)
 
 

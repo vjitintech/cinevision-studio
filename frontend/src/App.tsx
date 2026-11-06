@@ -14,6 +14,7 @@ import { LangContext, LANGS, makeT } from "./i18n";
 
 export interface Session {
   authenticated: boolean; mfa_required: boolean; registration_open: boolean; mode: string;
+  signup?: { mode: "open" | "owner_only" | "closed"; open: boolean; invite_required: boolean; first_account: boolean };
   user: { id: string; email: string; mfa_enabled: boolean } | null; csrf_token: string | null;
 }
 

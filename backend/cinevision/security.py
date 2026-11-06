@@ -24,18 +24,24 @@ COMMON_PASSWORDS = {
     "password", "password123", "123456789012", "qwertyuiop12", "letmein12345", "iloveyou1234",
     "administrator", "welcome12345", "passw0rd1234", "changeme1234", "000000000000", "111111111111",
     "abcdefghijkl", "qwerty123456", "1q2w3e4r5t6y", "cinevision123", "trustno1trustno1",
+    "password1234", "password12345", "qwertyuiopas", "123456789abc", "abc123456789", "iloveyou12345",
+    "cinevision1234", "cinevisionstudio", "football1234", "monkey123456", "sunshine1234", "princess1234",
 }
+MIN_PASSWORD = 12
 
 
 def password_problems(pw: str, email: str = "") -> list[str]:
+    """Friendly rules: length matters most, so any long phrase is fine — no forced symbols or digits."""
     problems = []
-    if len(pw) < 12:
-        problems.append("Use at least 12 characters.")
+    if len(pw) < MIN_PASSWORD:
+        problems.append(f"Use at least {MIN_PASSWORD} characters. A short sentence you can remember works well, "
+                        "for example four unrelated words.")
     if len(pw) > 256:
         problems.append("Use at most 256 characters.")
     if pw.lower() in COMMON_PASSWORDS or len(set(pw)) < 5:
-        problems.append("This password is too common or repetitive.")
-    if email and email.split("@")[0].lower() in pw.lower() and len(email.split("@")[0]) >= 4:
+        problems.append("This password is too common or repetitive. Try a few unrelated words.")
+    local = email.split("@")[0].lower() if email else ""
+    if local and len(local) >= 4 and local in pw.lower():
         problems.append("Don't include your email name in the password.")
     return problems
 

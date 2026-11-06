@@ -1,0 +1,32 @@
+# Keys still needing translation
+
+## Agent C (sign-up, admins, security banner) — all in frontend/src/i18n-strings.ts
+- only_owner (frontend/src/i18n-strings.ts) — English text CHANGED, re-translate
+- auth_first_owner (frontend/src/i18n-strings.ts)
+- auth_invite (frontend/src/i18n-strings.ts)
+- auth_invite_hint (frontend/src/i18n-strings.ts)
+- auth_closed (frontend/src/i18n-strings.ts)
+- pw_rule_length (frontend/src/i18n-strings.ts)
+- pw_rule_email (frontend/src/i18n-strings.ts)
+- sec_exposed_title (frontend/src/i18n-strings.ts)
+- sec_exposed_body (frontend/src/i18n-strings.ts) — keep {host}; keep CINEVISION_HOST / CINEVISION_SIGNUP untranslated
+- sec_accounts (frontend/src/i18n-strings.ts)
+- sec_signup (frontend/src/i18n-strings.ts) — keep {mode}
+- sec_you_are (frontend/src/i18n-strings.ts) — keep {role}
+- signup_open (frontend/src/i18n-strings.ts)
+- signup_owner_only (frontend/src/i18n-strings.ts)
+- signup_closed (frontend/src/i18n-strings.ts)
+- role_owner (frontend/src/i18n-strings.ts)
+- role_admin (frontend/src/i18n-strings.ts)
+- role_member (frontend/src/i18n-strings.ts)
+- sec_admin_help (frontend/src/i18n-strings.ts)
+- sec_make_admin (frontend/src/i18n-strings.ts)
+- sec_remove_admin (frontend/src/i18n-strings.ts)
+- sec_new_invite (frontend/src/i18n-strings.ts)
+- sec_invite_once (frontend/src/i18n-strings.ts)
+- sec_invite_open_note (frontend/src/i18n-strings.ts) — keep CINEVISION_SIGNUP=owner_only untranslated
+- sec_invites (frontend/src/i18n-strings.ts)
+- invite_unused (frontend/src/i18n-strings.ts)
+- invite_used (frontend/src/i18n-strings.ts)
+- invite_expired (frontend/src/i18n-strings.ts)
+- sec_remove (frontend/src/i18n-strings.ts)

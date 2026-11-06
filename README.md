@@ -28,27 +28,41 @@ measure camera tilt or lens perspective, and has no optional AI models. Everythi
 "your footage is good" verdict, camera planner, lighting studio, storyboard/animatic, 3D previs, shot list
 (CSV/JSON/print-to-PDF) — works the same. It's rebuilt and republished by `.github/workflows/pages.yml` on every push.
 
-## Self-hosted edition — quick start
+## Install on Windows
 
-### Docker (recommended)
+**1. One-click app (recommended — nothing else to install).**
+Download **CineVision-Windows-x64.zip** from the
+[Releases page](https://github.com/vjitintech/cinevision-studio/releases), unzip it (right-click → *Extract All*),
+open the folder and double-click **CineVision.cmd**. Your browser opens CineVision after a few seconds. Close the
+CineVision window to stop it. Python, FFmpeg and the web interface are inside the zip; your projects and keys are kept
+in `%LOCALAPPDATA%\CineVision` (copy its `keys` folder somewhere safe). Windows may warn that the download is not
+signed: click *More info* → *Run anyway* only if it came from the Releases page.
+
+**2. Source version, one line.** For people who want the latest code. In PowerShell:
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/vjitintech/cinevision-studio/main/scripts/install_windows.ps1 | iex"
+```
+It installs Git, Python, Node.js and FFmpeg with winget if they're missing, downloads or updates CineVision in
+`Documents\cinevision-studio`, adds a desktop shortcut and starts it. Run it again any time to update.
+
+**3. Manual.** Install Python 3.13 (`winget install Python.Python.3.13`), Node.js (`winget install OpenJS.NodeJS.LTS`)
+and FFmpeg (`winget install Gyan.FFmpeg`), open a new PowerShell window, then double-click `scripts\run_windows.cmd`
+and open http://127.0.0.1:8000. More detail: [docs/INSTALL_WINDOWS.md](docs/INSTALL_WINDOWS.md).
+
+CineVision only listens on this computer (127.0.0.1). On native Windows the FFmpeg sandbox has a timeout but no
+memory/CPU limits — use Docker for footage you don't trust.
+
+## Self-hosted edition — Docker
+
 ```bash
 python3 scripts/gen_keys.py deploy/secrets             # master key + separate backup key (keep copies offline)
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
-Open **https://localhost:8443**, trust Caddy's local certificate once, and create the owner account. Registration
-closes after the first account.
+Open **https://localhost:8443**, trust Caddy's local certificate once, and create the owner account. On Windows,
+run the same two commands in PowerShell from the repository folder (Docker Desktop).
 
 Optional profiles: `--profile scan` (ClamAV) and `--profile llm` (Ollama); uncomment the matching variables in
 `deploy/docker-compose.yml`.
-
-### Windows
-* **With Docker Desktop:** in PowerShell, from the repository folder:
-  `python scripts\gen_keys.py deploy\secrets` then `docker compose -f deploy\docker-compose.yml up -d --build`,
-  and open https://localhost:8443 (accept the local certificate warning once).
-* **Without Docker:** install Python 3.12 (`winget install Python.Python.3.12`), Node.js (`winget install OpenJS.NodeJS.LTS`)
-  and FFmpeg (`winget install Gyan.FFmpeg`), open a new PowerShell window, then double-click `scripts\run_windows.cmd`
-  (or run `powershell -ExecutionPolicy Bypass -File scripts\run_local.ps1`) and open http://127.0.0.1:8000.
-  On native Windows the FFmpeg sandbox has a timeout but no memory/CPU limits — prefer Docker for footage you don't trust.
 
 ### macOS / Linux without Docker
 Needs Python 3.12+, Node 20+ and `ffmpeg` on your PATH.
@@ -83,7 +97,9 @@ refine_concept, assemble_movie.
 | `CINEVISION_EXTRA_ORIGINS` | – | comma-separated additional allowed origins |
 | `CINEVISION_COOKIE_SECURE` | `true` | set `false` only for plain-http on 127.0.0.1 |
 | `CINEVISION_TRUST_PROXY` | `false` | honour `X-Forwarded-For` (only behind the bundled Caddy) |
-| `CINEVISION_ALLOW_REGISTRATION` | `true` | open sign-up; `false` closes it after the owner account |
+| `CINEVISION_SIGNUP` | `open` | `open` (email + password, no email check), `owner_only` (first account, then invite codes from the owner or admins), `closed` (first account only) |
+| `CINEVISION_ALLOW_REGISTRATION` | `true` | legacy: `false` means `CINEVISION_SIGNUP=owner_only` |
+| `CINEVISION_HOST` / `_PORT` | `127.0.0.1` / `8000` | listen address; anything but loopback prints a warning at start-up |
 | `CINEVISION_MAX_UPLOAD_MB` | `8192` | upload size cap |
 | `CINEVISION_MAX_DURATION_S` | `14400` | video length cap (4 hours) |
 | `CINEVISION_LOCAL_AI_URL`, `_MODEL`, `_VISION_MODEL` | – | preset for the local AI server (also settable in the app) |

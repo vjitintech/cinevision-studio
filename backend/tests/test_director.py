@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from conftest import PASSWORD, Client, start_server, wait_jobs
+from conftest import DRAWTEXT_FONT, PASSWORD, Client, start_server, stop_server, wait_jobs
 
 
 @pytest.fixture(scope="module")
@@ -14,8 +14,7 @@ def server(tmp_path_factory):
     """Own server: the first account registered here is the owner who may change AI settings."""
     proc, info = start_server(tmp_path_factory.mktemp("ddata"))
     yield info
-    proc.terminate()
-    proc.wait(10)
+    stop_server(proc)
 
 
 @pytest.fixture(scope="module")
@@ -25,7 +24,7 @@ def film(tmp_path_factory):
     out = d / "film.mp4"
     card = ("drawtext=text='A FILM BY SOMEONE':fontcolor=white:fontsize=64:x=(w-tw)/2:y=300,"
             "drawtext=text='Directed by Name Surname':fontcolor=white:fontsize=36:x=(w-tw)/2:y=420,"
-            "drawtext=text='Music by Another Person':fontcolor=white:fontsize=36:x=(w-tw)/2:y=480")
+            "drawtext=text='Music by Another Person':fontcolor=white:fontsize=36:x=(w-tw)/2:y=480").replace("drawtext=", "drawtext=" + DRAWTEXT_FONT)
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error",
                     "-f", "lavfi", "-i", "color=black:s=1280x720:d=4:r=24",
                     "-f", "lavfi", "-i", "testsrc2=s=1280x720:d=4:r=24",

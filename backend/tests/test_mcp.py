@@ -16,7 +16,7 @@ class MCP:
         env = {**os.environ, "CINEVISION_URL": f"http://127.0.0.1:{port}", "CINEVISION_ORIGIN": ORIGIN,
                "CINEVISION_EMAIL": email, "CINEVISION_PASSWORD": PASSWORD}
         self.p = subprocess.Popen([sys.executable, str(BACKEND / "cinevision" / "mcp_server.py")], stdin=subprocess.PIPE,
-                                  stdout=subprocess.PIPE, text=True, env=env)
+                                  stdout=subprocess.PIPE, text=True, encoding="utf-8", env=env)
         self.n = 0
 
     def send(self, method, params=None, notify=False):

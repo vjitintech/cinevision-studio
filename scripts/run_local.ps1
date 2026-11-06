@@ -57,14 +57,23 @@ if ($needBuild) {
   Pop-Location
 }
 
+$port = if ($env:CINEVISION_PORT) { $env:CINEVISION_PORT } else { "8000" }
 $env:CINEVISION_MASTER_KEY_FILE = Join-Path $root "deploy\secrets\master_key"
 if (-not $env:CINEVISION_DATA_DIR) { $env:CINEVISION_DATA_DIR = Join-Path $root "data" }
-$env:CINEVISION_PUBLIC_ORIGIN   = "http://127.0.0.1:8000"
+$env:CINEVISION_PUBLIC_ORIGIN   = "http://127.0.0.1:$port"
+$env:CINEVISION_EXTRA_ORIGINS   = "http://localhost:$port"
+$env:CINEVISION_PORT            = $port
 $env:CINEVISION_COOKIE_SECURE   = "false"     # plain http is acceptable only on 127.0.0.1
 $env:CINEVISION_EMBEDDED_WORKER = "true"
 $env:CINEVISION_FRONTEND_DIST   = Join-Path $root "frontend\dist"
+$env:PYTHONUTF8                 = "1"
+$face = Join-Path $root "backend\cinevision\models\face_detection_yunet_2023mar.onnx"
+if ((-not $env:CINEVISION_FACE_MODEL) -and (Test-Path $face)) { $env:CINEVISION_FACE_MODEL = $face }
+# The server listens on 127.0.0.1 (this computer only). Other computers can reach it only if you set
+# CINEVISION_HOST=0.0.0.0 yourself - the server then prints a warning.
 
 Write-Host ""
-Write-Host "CineVision Studio is starting -> open  http://127.0.0.1:8000  (Ctrl+C here to stop)" -ForegroundColor Green
+Write-Host "CineVision Studio is starting -> open  http://127.0.0.1:$port  (Ctrl+C here to stop)" -ForegroundColor Green
 Set-Location backend
 & ..\.venv\Scripts\python.exe -m cinevision.app
+exit $LASTEXITCODE

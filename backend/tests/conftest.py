@@ -20,42 +20,83 @@ BACKEND = Path(__file__).resolve().parents[1]
 ORIGIN = "http://testserver.local"
 
 
+def _drawtext_font() -> str:
+    """Windows FFmpeg builds have no fontconfig default, so drawtext needs an explicit font file there.
+    The value is quoted for the filtergraph level and the drive colon escaped for the option level."""
+    if sys.platform != "win32":
+        return ""
+    windir = os.environ.get("WINDIR", r"C:\Windows")
+    for name in ("arial.ttf", "segoeui.ttf", "tahoma.ttf"):
+        f = Path(windir) / "Fonts" / name
+        if f.exists():
+            return "fontfile='" + f.as_posix().replace(":", "\\:") + "':"
+    return ""
+
+
+DRAWTEXT_FONT = _drawtext_font()
+
+
 def _free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
 
 
-def start_server(data: Path):
+def start_server(data: Path, env: dict | None = None):
+    """Start the real app under uvicorn. `env` overrides settings (e.g. CINEVISION_SIGNUP) for one server."""
     port = _free_port()
     key = base64.b64encode(os.urandom(32)).decode()
-    env = {**os.environ, "CINEVISION_MASTER_KEY": key, "CINEVISION_DATA_DIR": str(data),
-           "CINEVISION_COOKIE_SECURE": "false", "CINEVISION_PUBLIC_ORIGIN": ORIGIN,
-           "CINEVISION_EMBEDDED_WORKER": "true", "CINEVISION_ALLOW_REGISTRATION": "true",
-           "CINEVISION_MAX_UPLOAD_MB": "40", "CINEVISION_RATE_LIMIT_MULTIPLIER": "50", "CINEVISION_MAX_DURATION_S": "60", "PYTHONPATH": str(BACKEND)}
-    log = open(data / "server.log", "w")
+    full_env = {**os.environ, "CINEVISION_MASTER_KEY": key, "CINEVISION_DATA_DIR": str(data),
+                "CINEVISION_COOKIE_SECURE": "false", "CINEVISION_PUBLIC_ORIGIN": ORIGIN,
+                "CINEVISION_EMBEDDED_WORKER": "true", "CINEVISION_ALLOW_REGISTRATION": "true",
+                "CINEVISION_MAX_UPLOAD_MB": "40", "CINEVISION_RATE_LIMIT_MULTIPLIER": "50", "CINEVISION_MAX_DURATION_S": "60",
+                "PYTHONPATH": str(BACKEND), **(env or {})}
+    for k in [k for k, v in full_env.items() if v is None]:
+        full_env.pop(k)
+    log = open(data / "server.log", "w", encoding="utf-8")
     proc = subprocess.Popen([sys.executable, "-m", "uvicorn", "cinevision.app:create_app", "--factory",
-                             "--port", str(port), "--no-access-log"], cwd=BACKEND, env=env, stdout=log, stderr=log)
-    for _ in range(100):
+                             "--host", "127.0.0.1", "--port", str(port), "--no-access-log"],
+                            cwd=BACKEND, env=full_env, stdout=log, stderr=log)
+    # deadline rather than a fixed number of tries: on Windows a refused connection takes ~2 s, and the
+    # first import of numpy/OpenCV can be slow on a cold CI machine
+    deadline = time.monotonic() + 120
+    while True:
+        if proc.poll() is not None:
+            log.close()
+            raise RuntimeError((data / "server.log").read_text(encoding="utf-8", errors="replace"))
         try:
             c = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
             c.request("GET", "/api/health")
             if c.getresponse().status == 200:
                 break
         except OSError:
-            time.sleep(0.1)
-    else:
-        proc.kill()
-        raise RuntimeError((data / "server.log").read_text())
+            pass
+        if time.monotonic() > deadline:
+            proc.kill()
+            log.close()
+            raise RuntimeError((data / "server.log").read_text(encoding="utf-8", errors="replace"))
+        time.sleep(0.1)
+    proc._cv_log = log  # closed by stop_server
     return proc, {"port": port, "data": data, "key": key}
+
+
+def stop_server(proc) -> None:
+    proc.terminate()
+    try:
+        proc.wait(10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(10)
+    log = getattr(proc, "_cv_log", None)
+    if log:
+        log.close()  # Windows can't delete the temp folder while the log is still open
 
 
 @pytest.fixture(scope="session")
 def server(tmp_path_factory):
     proc, info = start_server(tmp_path_factory.mktemp("data"))
     yield info
-    proc.terminate()
-    proc.wait(10)
+    stop_server(proc)
 
 
 class Client:

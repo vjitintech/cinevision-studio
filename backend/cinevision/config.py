@@ -14,7 +14,7 @@ from pathlib import Path
 def _env(name: str, default: str | None = None) -> str | None:
     file_var = os.environ.get(f"{name}_FILE")
     if file_var:
-        return Path(file_var).read_text().strip()
+        return Path(file_var).read_text(encoding="utf-8-sig").strip()
     return os.environ.get(name, default)
 
 
@@ -38,7 +38,10 @@ class Settings:
     cookie_secure: bool = True
     public_origin: str = "https://localhost:8443"
     extra_origins: tuple = ()
-    allow_registration: bool = True           # open sign-up (email + password); set false to close it
+    allow_registration: bool = True           # legacy switch; CINEVISION_SIGNUP supersedes it
+    signup_mode: str = "open"                 # open | owner_only (first account + invite codes) | closed
+    host: str = "127.0.0.1"                   # address the server listens on; loopback unless explicitly changed
+    port: int = 8000
     max_upload_bytes: int = 8192 * 1024 * 1024
     max_duration_s: float = 14400.0
     max_width: int = 4096
@@ -68,6 +71,15 @@ class Settings:
     extra: dict = field(default_factory=dict)
 
     @property
+    def network_exposed(self) -> bool:
+        """Listening on a non-loopback address without the bundled TLS proxy in front (Docker sets trust_proxy)."""
+        return not is_loopback_host(self.host) and not self.trust_proxy
+
+    @property
+    def plain_http(self) -> bool:
+        return self.public_origin.lower().startswith("http://")
+
+    @property
     def allowed_origins(self) -> set:
         return {self.public_origin, *self.extra_origins}
 
@@ -82,6 +94,27 @@ class Settings:
     @property
     def tmp_dir(self) -> Path:
         return self.data_dir / "tmp"
+
+
+SIGNUP_MODES = ("open", "owner_only", "closed")
+
+
+def is_loopback_host(host: str) -> bool:
+    h = (host or "").strip().strip("[]").lower()
+    if h in {"localhost", "::1", "0:0:0:0:0:0:0:1"}:
+        return True
+    parts = h.split(".")
+    return len(parts) == 4 and parts[0] == "127" and all(p.isdigit() for p in parts)
+
+
+def _signup_mode() -> str:
+    raw = (_env("CINEVISION_SIGNUP") or "").strip().lower().replace("-", "_")
+    if not raw:
+        # backwards compatible: CINEVISION_ALLOW_REGISTRATION=false used to mean "only the first account"
+        return "open" if _bool("CINEVISION_ALLOW_REGISTRATION", True) else "owner_only"
+    if raw not in SIGNUP_MODES:
+        raise RuntimeError("CINEVISION_SIGNUP must be 'open', 'owner_only' or 'closed'")
+    return raw
 
 
 def load_settings() -> Settings:
@@ -102,6 +135,9 @@ def load_settings() -> Settings:
         public_origin=(_env("CINEVISION_PUBLIC_ORIGIN", "https://localhost:8443") or "").rstrip("/"),
         extra_origins=tuple(o.strip().rstrip("/") for o in (_env("CINEVISION_EXTRA_ORIGINS", "") or "").split(",") if o.strip()),
         allow_registration=_bool("CINEVISION_ALLOW_REGISTRATION", True),
+        signup_mode=_signup_mode(),
+        host=(_env("CINEVISION_HOST", "127.0.0.1") or "127.0.0.1").strip(),
+        port=_int("CINEVISION_PORT", 8000),
         max_upload_bytes=_int("CINEVISION_MAX_UPLOAD_MB", 8192) * 1024 * 1024,
         max_duration_s=float(_int("CINEVISION_MAX_DURATION_S", 14400)),
         embedded_worker=_bool("CINEVISION_EMBEDDED_WORKER", False),

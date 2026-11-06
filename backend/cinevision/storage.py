@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import BinaryIO, Iterator
@@ -101,12 +102,17 @@ def destroy_blob_file(blob_id: str) -> None:
         p = blob_path(blob_id)
     except StorageError:
         return
-    try:
-        p.unlink(missing_ok=True)
-    except PermissionError:
-        # Windows refuses to delete a file that is still open (e.g. mid-stream). The wrapped key is already gone,
-        # so the ciphertext is unreadable; startup cleanup removes orphans later.
-        return
+    # Windows refuses to delete a file another thread still has open (a stream or a job finishing its read).
+    # Readers hold blobs only briefly, so retry for a few seconds. If it is still busy the wrapped key is already
+    # gone, so the ciphertext is unreadable, and the periodic cleanup removes the orphan later.
+    for attempt in range(40):
+        try:
+            p.unlink(missing_ok=True)
+            break
+        except PermissionError:
+            if attempt == 39:
+                return
+            time.sleep(0.1)
     try:
         p.parent.rmdir()
     except OSError:

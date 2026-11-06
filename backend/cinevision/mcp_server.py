@@ -260,6 +260,9 @@ def handle(cv: CineVision, msg: dict) -> dict | None:
 
 
 def main():
+    for stream in (sys.stdin, sys.stdout):  # MCP stdio is UTF-8; Windows pipes default to the ANSI code page
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     cv = CineVision()
     for line in sys.stdin:
         line = line.strip()
