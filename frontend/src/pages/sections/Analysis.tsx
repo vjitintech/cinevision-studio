@@ -54,7 +54,7 @@ export const AnalysisSection = {
                 <div className="grow" style={{ minWidth: 240 }}>
                   <h4 style={{ color: "var(--text)" }}>Shot {s.index + 1} <span className="faint tc">{fmtTime(s.start_s)}–{fmtTime(s.end_s)}</span></h4>
                   <div className="grid2">
-                    <Fact label="Shot size" t={s.shot_size} />
+                    <Fact label="Shot size" t={s.shot_size} render={(v) => (s.shot_size?.abbr ? `${v} (${s.shot_size.abbr})` : v)} />
                     <Fact label="Camera angle" t={s.camera_angle} />
                     <Fact label="Camera movement" t={s.movement.movement} />
                     {s.movement.camera_vs_subject && <Fact label="Camera vs subject motion" t={s.movement.camera_vs_subject}
@@ -103,8 +103,17 @@ export const AnalysisSection = {
                 <Fact label="Silent gaps" t={a.sound.silences} render={(v) => (v.length ? `${v.length} (${Math.round((a.sound.silent_share?.value || 0) * 100)}% of the time)` : "none")} />
                 <Fact label="Background noise" t={a.sound.noise_floor_db} render={(v) => (v == null ? "—" : `${Math.round(v)} dB`)} />
                 {a.sound.content && <Fact label="What it sounds like" t={a.sound.content} render={(v) => v.label} />}
+                {a.sound.speech_to_text && <Fact label="Dialogue" t={a.sound.dialogue?.value ? a.sound.dialogue : a.sound.speech_to_text}
+                  render={(v) => (typeof v === "string" ? `not checked (${v})` : `${Math.round((v.speech_s || 0) / 6) / 10} min of speech · ${v.language || "?"} · ${v.words_per_minute ?? "—"} words/min · ${v.buried.length} under music · ${v.unclear.length} unclear · ${v.dead_air.length} dead air`)} />}
               </div>
             ) : <p className="small muted">Sound couldn't be measured on this clip.</p>}
+            {a.sound.dialogue?.value?.segments?.length > 0 && (
+              <details><summary>Transcript ({a.sound.dialogue.value.engine}, on this computer)</summary>
+                <div className="small" style={{ maxHeight: 280, overflow: "auto" }}>
+                  {a.sound.dialogue.value.segments.map((x: any) => <div key={x.start_s}><span className="faint tc">{fmtTime(x.start_s)}</span> {x.text}{x.buried ? " · under music" : ""}{x.unclear ? " · unclear" : ""}</div>)}
+                </div>
+              </details>
+            )}
           </>
         )}
         {a.on_screen_text && (
@@ -112,6 +121,18 @@ export const AnalysisSection = {
             <h3>Titles, captions and credits</h3>
             <Fact label="Text on screen" t={a.on_screen_text}
               render={(v) => (v.length ? v.map((x: any) => `${x.kind} ${fmtTime(x.start_s)}–${fmtTime(x.end_s)}`).join(" · ") : "none found")} />
+            {a.on_screen_text.value?.length > 0 && (
+              <div className="grid2">
+                {a.on_screen_text.value.slice(0, 12).map((x: any) => (
+                  <div key={x.start_s} className="small concept" style={{ padding: 8 }}>
+                    <b>{x.kind}</b> <span className="faint tc">{fmtTime(x.start_s)} · {x.on_screen_s}s</span>
+                    {x.text && <div style={{ whiteSpace: "pre-line" }}>{x.text}</div>}
+                    <div className="muted">{x.words ? `${x.words} words, needs about ${x.needed_s}s · ` : ""}{x.title_safe === false ? "outside title-safe area · " : ""}{x.contrast_ratio != null ? `contrast ${x.contrast_ratio}:1` : ""}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {a.on_screen_text.reading && !a.on_screen_text.reading.available && <p className="small muted">Text reading is not available — install Tesseract to enable it.</p>}
           </>
         )}
 
@@ -119,6 +140,7 @@ export const AnalysisSection = {
         <div className="grid3">
           <Fact label="Setting" t={a.environment.setting} />
           <Fact label="Time of day" t={a.environment.time_of_day} />
+          {a.environment.cues?.value?.seen && <Fact label="Clues used" t={a.environment.cues} render={(v) => (v.seen.length ? v.seen.join(", ") : "none") + (v.conflicting ? " (they disagree)" : "")} />}
           <Fact label="Practical lights" t={a.environment.practical_lights} render={(v) => v.length ? `${v.length} candidate${v.length > 1 ? "s" : ""} (${v.map((p: any) => p.tint).join(", ")})` : "none found"} />
         </div>
 

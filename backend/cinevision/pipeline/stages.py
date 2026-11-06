@@ -119,7 +119,8 @@ def analyze(ctx: jobs.JobContext, params: dict) -> str:
             img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
             if img is not None:
                 keyframes.append((f["t_s"], img))
-        result = engine.run(str(proxy), keyframes, meta, lambda p, stage: ctx.progress(p * 0.9, stage))
+        result = engine.run(str(proxy), keyframes, meta, lambda p, stage: ctx.progress(p * 0.9, stage),
+                            owner=owner, lang=user_language(owner))
         from ..adapters import vision
         if vision.available(owner) and keyframes:
             ctx.progress(0.92, "Asking the local vision model to describe the scene")

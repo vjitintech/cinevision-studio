@@ -117,7 +117,8 @@ def content_reading(path: str, duration: float) -> dict | None:
     return {"label": label, "speech_like": round(speech, 2), "music_like": round(music, 2)}
 
 
-def analyse(path: str, duration: float, has_audio: bool) -> dict:
+def analyse(path: str, duration: float, has_audio: bool, transcribe: bool = False, owner: str | None = None,
+            budget_s: float | None = None) -> dict:
     if not has_audio:
         return {"present": tag(False, 1.0, "observed", "The clip has no sound track.")}
     lo = loudness(path, duration)
@@ -142,4 +143,7 @@ def analyse(path: str, duration: float, has_audio: bool) -> dict:
     if reading:
         out["content"] = tag(reading, 0.4, "heuristic",
                              "From loudness rhythm and spectral steadiness — a rough reading, not speech recognition.")
+    if transcribe:
+        from . import speech
+        out.update(speech.analyse(path, duration, owner=owner, budget_s=budget_s))
     return out
