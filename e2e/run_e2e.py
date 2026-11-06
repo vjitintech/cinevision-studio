@@ -158,7 +158,8 @@ def main():
             page.screenshot(path=shots / "05-concept-detail.png", full_page=True)
 
             page.get_by_role("button", name="Make the lighting more dramatic").click()
-            expect(page.get_by_text("Made the lighting more dramatic")).to_be_visible()
+            # the "✓ applied" notice (the revision history, collapsed in <details>, repeats the same words once it reloads)
+            expect(page.get_by_text("✓ Made the lighting more dramatic")).to_be_visible()
             page.get_by_label("Refinement request").fill("move the camera lower and teleport to the moon")
             page.get_by_role("button", name="Apply change").click()
             expect(page.get_by_text("Not understood")).to_be_visible()
@@ -275,6 +276,9 @@ def main():
             page.get_by_role("link", name="Private dashboard").click()
             expect(page.locator(".reel")).to_have_count(1)                       # only the assembly; its clips are inside it
             page.locator(".reel a.title").click()
+            # remove one clip straight after the page (and its thumbnails) loaded: no request may hit a deleted file
+            page.get_by_role("button", name="Remove A003_astronaut.mp4").click()
+            expect(page.locator(".clip-card")).to_have_count(3)
             page.get_by_role("button", name="Delete assembly").click()
             page.get_by_role("button", name="Click again to delete everything").click()
             expect(page.get_by_text("No projects yet")).to_be_visible()          # assembly + every clip deleted
