@@ -7,7 +7,7 @@ from .i18n import LANGUAGES, pack
 from .i18n import vocab
 
 # params whose values are analysis vocabulary (translated term by term); others are numbers, colours or shot lists
-VOCAB_PARAMS = {"mood", "pacing", "moves", "size", "sizes", "placement", "key", "contrast", "cast", "label"}
+VOCAB_PARAMS = {"kind", "mood", "pacing", "moves", "size", "sizes", "placement", "key", "contrast", "cast", "label"}
 _PATTERNS: dict[str, tuple] = {}
 
 
