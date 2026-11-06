@@ -99,9 +99,12 @@ def build(analysis: dict, assessment: dict | None) -> dict:
         shallow = sum("shallow" in d for d in dofs) >= len(dofs) / 2
         F.append(_f("composition", "comp.shallow" if shallow else "comp.deep", "good" if shallow else "improve", confidence=0.35))
 
-    # lighting
+    # lighting (not judged on title/credit cards: white text on black is meant to be "dark" and high-contrast)
     col = analysis.get("color", {})
-    if _c(col.get("mean_luminance")) > 0:
+    dur = float(_v(analysis.get("clip", {}).get("duration_s"), 0) or 0)
+    cards_s = sum(t.get("on_screen_s", 0) for t in (_v(analysis.get("on_screen_text"), []) or []) if t.get("max_lines", 0) >= 2)
+    is_text_card = bool(dur) and cards_s / dur >= 0.5
+    if _c(col.get("mean_luminance")) > 0 and not is_text_card:
         mean = _v(col.get("mean_luminance"), 0.45)
         clip = _v(col.get("clipping"), {}) or {}
         key = _v(col.get("tonal_key"), "") or ""
@@ -120,7 +123,7 @@ def build(analysis: dict, assessment: dict | None) -> dict:
         if not bad:
             F.append(_f("lighting", "light.good", "good", "observed", 0.8, key=key or "mid-key",
                         contrast=contrast.get("label", "normal")))
-    if (_v(analysis.get("environment", {}).get("practical_lights"), []) or []):
+    if not is_text_card and (_v(analysis.get("environment", {}).get("practical_lights"), []) or []):
         F.append(_f("lighting", "light.practicals", "good", "estimated", 0.4))
 
     # colour

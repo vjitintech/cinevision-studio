@@ -168,7 +168,7 @@ FINDINGS = {
                            "why": "Knowing how many words a card has tells you how long it must stay on screen."},
     "titles.read": {"obs": "Words read on screen: {n} card(s), {words} words in total.",
                     "why": "Every word on screen costs reading time. Fewer words read faster and look cleaner."},
-    "titles.too_short_to_read": {"obs": "The {kind} at {at} shows {words} words for only {secs} s.",
+    "titles.too_short_to_read": {"obs": "At {at}: {words} words of {kind} on screen for only {secs} s.",
                                  "sug": "Hold it for at least {need} s, or use fewer words.",
                                  "why": "People read about 2–3 words a second, plus a moment to notice the card."},
     "titles.unsafe": {"obs": "Text in {n} place(s) sits outside the title-safe area. The first is at {at}.",
