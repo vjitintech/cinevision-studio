@@ -334,6 +334,20 @@ def test_timeline_export_edl_and_fcpxml_are_frame_accurate():
         assert a.find("media-rep").get("kind") == "original-media"
 
 
+def test_timeline_names_cannot_inject_lines_or_paths():
+    from cinevision.assembly import timeline as TL
+    import xml.etree.ElementTree as ET
+    e = {"fps": 25, "width": 1280, "height": 720, "duration_s": 3, "in_s": 0, "out_s": 3, "transition": "cut"}
+    tl = TL.build([{**e, "name": 'a"\n002  EVIL V C 00:00:00:00\r<x>&.mp4'}, {**e, "name": "../../etc/passwd"}],
+                  'T"\n</event><evil/>')
+    edl = TL.to_edl(tl)
+    assert sum(line[:3].isdigit() for line in edl.splitlines()) == 2                 # one event line per clip
+    root = ET.fromstring(TL.to_fcpxml(tl).split("\n", 2)[2])
+    srcs = [m.get("src") for m in root.iter("media-rep")]
+    assert all(s.startswith("./") and "/" not in s[2:] for s in srcs), srcs           # media stays next to the XML
+    assert root.find(".//event").get("name").startswith('T"')
+
+
 def test_assembly_takes_more_than_20_clips_an_hour(tmp_path_factory):
     """Real rate limits (multiplier 1): single projects keep 20 uploads an hour, but an assembly's clips don't
     share that budget, otherwise clip 21 of a 300-clip movie is refused (and the page then deletes it)."""
