@@ -67,6 +67,10 @@ class Settings:
     external_llm_key: str | None = None
     image_gen_url: str | None = None
     video_gen_url: str | None = None
+    # Analysis engines (all optional, detected at run time)
+    analysis_budget_s: int = 900              # time budget for detailed per-shot analysis of long films
+    whisper_model: str = "small"              # faster-whisper model name or local path (speech to text)
+    tesseract_bin: str | None = None          # Tesseract OCR binary; default: found on PATH
     frontend_dist: Path = Path(__file__).resolve().parents[2] / "frontend" / "dist"
     extra: dict = field(default_factory=dict)
 
@@ -154,6 +158,9 @@ def load_settings() -> Settings:
         external_llm_key=_env("CINEVISION_EXTERNAL_LLM_KEY"),
         image_gen_url=_env("CINEVISION_IMAGE_GEN_URL"),
         video_gen_url=_env("CINEVISION_VIDEO_GEN_URL"),
+        analysis_budget_s=max(60, _int("CINEVISION_ANALYSIS_BUDGET_S", 900)),
+        whisper_model=_env("CINEVISION_WHISPER_MODEL", "small") or "small",
+        tesseract_bin=_env("CINEVISION_TESSERACT"),
     )
     dist = _env("CINEVISION_FRONTEND_DIST")
     if dist:

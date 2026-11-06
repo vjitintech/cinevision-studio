@@ -3,16 +3,20 @@ from __future__ import annotations
 
 import logging
 import math
+import os
+import subprocess
+import threading
+import time
 from typing import Callable
 
 import cv2
 import numpy as np
 
-from . import audio, color, composition, environment, motion, narrative, subjects, tag, titles
+from . import audio, color, composition, environment, motion, narrative, speech, subjects, tag, titles
 
 log = logging.getLogger("cinevision.analysis")
 
-ENGINE = {"id": "cv-scene", "version": "1.0", "detectors": ["lk-flow+ransac", "hog-people", "spectral-residual"],
+ENGINE = {"id": "cv-scene", "version": "1.1", "detectors": ["lk-flow+ransac", "hog-people", "spectral-residual"],
           "analysis_fps": 8}
 
 ASSUMED_HFOV_DEG = 55.0   # typical "normal" focal length on Super35 (~24–28 mm); used only for proxy placement
@@ -20,32 +24,118 @@ ASSUMED_HFOV_DEG = 55.0   # typical "normal" focal length on Super35 (~24–28 m
 
 MAX_SAMPLES = 900          # caps memory for long clips (~8 fps up to ~2 minutes, sparser beyond)
 SAMPLE_W = 320
+KEEP_COLOUR = 48           # colour copies of sampled frames kept (for fallbacks); the rest keep only grey
+
+
+class _Collector:
+    """Receives decoded frames one at a time: keeps a grey copy + histogram for cuts and motion, finds text on the
+    fly, and keeps only a few colour copies, so memory stays bounded however long the film is."""
+
+    def __init__(self, expected: int, keep_all_colour: bool):
+        self.samples: list[motion.Sample] = []
+        self.text_hits: list = []
+        self.keep_every = 1 if keep_all_colour else max(1, expected // KEEP_COLOUR)
+
+    def add(self, t: float, small: np.ndarray) -> None:
+        keep = len(self.samples) % self.keep_every == 0
+        self.samples.append(motion.Sample(t=t, gray=cv2.cvtColor(small, cv2.COLOR_BGR2GRAY), hist=motion.hist_of(small),
+                                          bgr_small=small if keep else None))
+        try:
+            hit = titles.frame_hit(t, small)
+        except Exception:  # noqa: BLE001 - text finding is optional per frame
+            hit = None
+        if hit:
+            self.text_hits.append(hit)
+
+    def reset(self):
+        self.samples, self.text_hits = [], []
 
 
 def _make_sample(t: float, small: np.ndarray) -> motion.Sample:
     return motion.Sample(t=t, gray=cv2.cvtColor(small, cv2.COLOR_BGR2GRAY), hist=motion.hist_of(small), bgr_small=small)
 
 
-def _sample_ffmpeg(path: str, duration: float, fps_target: float, aspect: float) -> list[motion.Sample]:
-    """Decode with FFmpeg (the same decoder that prepared the clip), piping raw BGR frames — no OpenCV video I/O."""
+def _read_exact(f, n: int) -> bytes | None:
+    parts, got = [], 0
+    while got < n:
+        b = f.read(n - got)
+        if not b:
+            return None
+        parts.append(b)
+        got += len(b)
+    return b"".join(parts)
+
+
+def _stream_frames(cmd: list[str], lim, frame_bytes: int, on_frame: Callable[[int, bytes], None], max_frames: int) -> int:
+    """Run a sandboxed FFmpeg and hand each raw frame to on_frame as it arrives (no full-output buffering)."""
+    from ..media import sandbox
+    kw: dict = {"stdin": subprocess.DEVNULL, "stdout": subprocess.PIPE, "stderr": subprocess.DEVNULL, "env": sandbox._env()}
+    if sandbox.WINDOWS:
+        kw["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    else:
+        kw.update(preexec_fn=sandbox._preexec(lim), close_fds=True)
+    proc = subprocess.Popen(cmd, **kw)
+    timed_out = []
+
+    def kill():
+        try:
+            if sandbox.WINDOWS:
+                proc.kill()
+            else:
+                import signal
+                os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, OSError):
+            pass
+
+    def on_timeout():
+        timed_out.append(True)
+        kill()
+    timer = threading.Timer(lim.timeout_s, on_timeout)
+    timer.daemon = True
+    timer.start()
+    n = 0
+    try:
+        while n < max_frames:
+            buf = _read_exact(proc.stdout, frame_bytes)
+            if buf is None:
+                break
+            on_frame(n, buf)
+            n += 1
+    finally:
+        timer.cancel()
+        if proc.poll() is None:
+            kill()
+        proc.stdout.close()
+        proc.wait()
+    if timed_out and n == 0:
+        raise sandbox.SandboxError("media tool timed out")
+    return n
+
+
+def _sample_ffmpeg(path: str, duration: float, fps_target: float, aspect: float, col: _Collector | None = None):
+    """Decode with FFmpeg (the same decoder that prepared the clip), streaming raw BGR frames — no OpenCV video I/O."""
     from ..config import settings
     from ..media import sandbox
+    col = col or _Collector(MAX_SAMPLES, True)
     fps = min(fps_target, MAX_SAMPLES / max(duration, 0.5))
     h = max(2, int(round(SAMPLE_W / max(aspect, 0.1) / 2)) * 2)
     s = settings()
-    res = sandbox.run([s.ffmpeg_bin, "-nostdin", "-hide_banner", "-loglevel", "error", "-protocol_whitelist", "file",
-                       "-i", f"file:{path}", "-an", "-vf", f"fps={fps:.4f},scale={SAMPLE_W}:{h}:flags=area",
-                       "-frames:v", str(MAX_SAMPLES), "-f", "rawvideo", "-pix_fmt", "bgr24", "pipe:1"],
-                      sandbox.Limits(cpu_s=max(600, int(duration * 4)), timeout_s=max(s.ffmpeg_timeout_s, int(duration * 2))))
     size = SAMPLE_W * h * 3
-    if res.returncode != 0 or len(res.stdout) < size:
+    cmd = [s.ffmpeg_bin, "-nostdin", "-hide_banner", "-loglevel", "error", "-protocol_whitelist", "file",
+           "-i", f"file:{path}", "-an", "-vf", f"fps={fps:.4f},scale={SAMPLE_W}:{h}:flags=area",
+           "-frames:v", str(MAX_SAMPLES), "-f", "rawvideo", "-pix_fmt", "bgr24", "pipe:1"]
+    lim = sandbox.Limits(cpu_s=max(600, int(duration * 4)), timeout_s=max(s.ffmpeg_timeout_s, int(duration * 2)))
+
+    def on_frame(i: int, buf: bytes):
+        col.add(i / fps, np.frombuffer(buf, np.uint8).reshape(h, SAMPLE_W, 3).copy())
+    if _stream_frames(cmd, lim, size, on_frame, MAX_SAMPLES) == 0:
+        col.reset()
         raise RuntimeError("ffmpeg sampling failed")
-    buf = np.frombuffer(res.stdout, np.uint8)
-    n = len(buf) // size
-    return [_make_sample(i / fps, buf[i * size:(i + 1) * size].reshape(h, SAMPLE_W, 3).copy()) for i in range(n)]
+    return col.samples
 
 
-def _sample_opencv(path: str, duration: float, fps_target: float) -> list[motion.Sample]:
+def _sample_opencv(path: str, duration: float, fps_target: float, col: _Collector | None = None):
+    col = col or _Collector(MAX_SAMPLES, True)
     cap = cv2.VideoCapture(path)
     if not cap.isOpened():
         raise RuntimeError("cannot open proxy for analysis")
@@ -53,47 +143,127 @@ def _sample_opencv(path: str, duration: float, fps_target: float) -> list[motion
     if not (1 <= native <= 240):
         native = 24.0
     step = max(1, int(round(native / min(fps_target, MAX_SAMPLES / max(duration, 0.5)))))
-    out, i = [], 0
-    while len(out) < MAX_SAMPLES and cap.grab():
+    i = 0
+    while len(col.samples) < MAX_SAMPLES and cap.grab():
         if i % step == 0:
             ok, frame = cap.retrieve()
             if ok and frame is not None and frame.size:
                 small = cv2.resize(frame, (SAMPLE_W, max(2, int(SAMPLE_W * frame.shape[0] / frame.shape[1]))),
                                    interpolation=cv2.INTER_AREA)
-                out.append(_make_sample(i / native, small))
+                col.add(i / native, small)
         i += 1
     cap.release()
-    if not out:
+    if not col.samples:
         raise RuntimeError("opencv decoded no frames")
-    return out
+    return col.samples
 
 
-def _sample_keyframes(keyframes: list[tuple[float, np.ndarray]]) -> list[motion.Sample]:
-    out = []
+def _sample_keyframes(keyframes: list[tuple[float, np.ndarray]], col: _Collector | None = None):
+    col = col or _Collector(len(keyframes), True)
     for t, img in keyframes:
         small = cv2.resize(img, (SAMPLE_W, max(2, int(SAMPLE_W * img.shape[0] / img.shape[1]))), interpolation=cv2.INTER_AREA)
-        out.append(_make_sample(t, small))
-    return out
+        col.add(t, small)
+    return col.samples
 
 
 def _sample_video(path: str, duration: float, fps_target: float, aspect: float,
-                  keyframes: list[tuple[float, np.ndarray]]) -> tuple[list[motion.Sample], str]:
+                  keyframes: list[tuple[float, np.ndarray]]) -> tuple[list[motion.Sample], str, _Collector]:
     """Try FFmpeg, then OpenCV, then fall back to the (sparser) keyframes extracted at ingest. Never raises."""
-    for name, fn in (("ffmpeg", lambda: _sample_ffmpeg(path, duration, fps_target, aspect)),
-                     ("opencv", lambda: _sample_opencv(path, duration, fps_target))):
+    expected = int(min(MAX_SAMPLES, fps_target * max(duration, 0.5)))
+    col = _Collector(expected, keep_all_colour=not keyframes)
+    for name, fn in (("ffmpeg", lambda: _sample_ffmpeg(path, duration, fps_target, aspect, col)),
+                     ("opencv", lambda: _sample_opencv(path, duration, fps_target, col))):
         try:
-            return fn(), name
+            fn()
+            if col.samples:
+                return col.samples, name, col
         except Exception as e:  # noqa: BLE001 - fall through to the next decoder
             log.warning("frame sampling via %s failed: %s", name, type(e).__name__)
+        col.reset()
     try:
-        return _sample_keyframes(keyframes), "keyframes"
+        col = _Collector(len(keyframes), True)
+        _sample_keyframes(keyframes, col)
+        return col.samples, "keyframes", col
     except Exception as e:  # noqa: BLE001
         log.warning("keyframe sampling failed: %s", type(e).__name__)
-        return [], "none"
+        return [], "none", _Collector(0, True)
+
+
+def _ff_frames(path: str, start: float, span: float, fps: float, width: int, aspect: float,
+               max_frames: int) -> list[tuple[float, np.ndarray]]:
+    """A short burst of frames at `width` px starting at `start` (fast seek)."""
+    from ..config import settings
+    from ..media import sandbox
+    s = settings()
+    h = max(2, int(round(width / max(aspect, 0.1) / 2)) * 2)
+    res = sandbox.run([s.ffmpeg_bin, "-nostdin", "-hide_banner", "-loglevel", "error", "-protocol_whitelist", "file",
+                       "-ss", f"{max(0.0, start):.3f}", "-i", f"file:{path}", "-an", "-t", f"{max(0.05, span):.3f}",
+                       "-vf", f"fps={fps:.4f},scale={width}:{h}:flags=area", "-frames:v", str(max_frames),
+                       "-f", "rawvideo", "-pix_fmt", "bgr24", "pipe:1"], sandbox.Limits(cpu_s=60, timeout_s=60))
+    size = width * h * 3
+    if res.returncode != 0 or len(res.stdout) < size:
+        return []
+    n = len(res.stdout) // size
+    buf = np.frombuffer(res.stdout, np.uint8)
+    return [(start + i / fps, buf[i * size:(i + 1) * size].reshape(h, width, 3).copy()) for i in range(n)]
+
+
+def _frame_at(path: str, t: float) -> np.ndarray | None:
+    """One frame at the proxy's own resolution (for reading on-screen text)."""
+    from ..config import settings
+    from ..media import sandbox
+    s = settings()
+    res = sandbox.run([s.ffmpeg_bin, "-nostdin", "-hide_banner", "-loglevel", "error", "-protocol_whitelist", "file",
+                       "-ss", f"{max(0.0, t):.3f}", "-i", f"file:{path}", "-an", "-frames:v", "1",
+                       "-f", "image2pipe", "-vcodec", "png", "pipe:1"], sandbox.Limits(cpu_s=60, timeout_s=60))
+    if res.returncode != 0 or not res.stdout:
+        return None
+    img = cv2.imdecode(np.frombuffer(res.stdout, np.uint8), cv2.IMREAD_COLOR)
+    return img if img is not None and img.size else None
 
 
 LONG_CLIP_S = 150          # beyond this, cuts come from FFmpeg's scene detector over every frame
-MAX_DETAILED_SHOTS = 80    # heavy per-shot work (composition, people) on at most this many representative shots
+MAX_DETAILED_SHOTS = 80    # detailed shots for short clips, and the minimum for long films
+EST_SHOT_COST_S = 0.8      # rough cost of one detailed shot of a long film (burst decode + motion + people)
+DETAIL_SHARE = 0.75        # share of the time budget the detailed-shot pass may use
+BURST_FRAMES = 8
+
+
+def _budget_s() -> float:
+    try:
+        from ..config import settings
+        return float(getattr(settings(), "analysis_budget_s", 900) or 900)
+    except Exception:  # noqa: BLE001
+        return float(os.environ.get("CINEVISION_ANALYSIS_BUDGET_S") or 900)
+
+
+def detail_target(n_shots: int, duration: float, budget_s: float) -> int:
+    """How many shots get the detailed pass. Short clips: up to 80 (unchanged). Long films: grows with running time
+    (+10 per minute beyond the first 2½) within what the time budget allows."""
+    if n_shots <= MAX_DETAILED_SHOTS or duration <= LONG_CLIP_S:
+        return min(n_shots, MAX_DETAILED_SHOTS)
+    by_duration = MAX_DETAILED_SHOTS + int(10 * max(0.0, duration - LONG_CLIP_S) / 60)
+    by_time = int(budget_s * DETAIL_SHARE / EST_SHOT_COST_S)
+    return max(MAX_DETAILED_SHOTS, min(n_shots, by_duration, by_time))
+
+
+def detail_plan(shots: list[dict], k: int) -> list[int]:
+    """Shot indices for the detailed pass, in processing order: evenly spread shots interleaved with the longest
+    ones (always including the first and last), so a pass cut short by the time budget is still representative."""
+    n = len(shots)
+    if k >= n:
+        return list(range(n))
+    n_spread = max(2, int(round(k * 0.6)))
+    spread = list(dict.fromkeys(int(round(i * (n - 1) / (n_spread - 1))) for i in range(n_spread)))
+    in_spread = set(spread)
+    longest = [i for i in sorted(range(n), key=lambda i: (-(shots[i]["end_s"] - shots[i]["start_s"]), i))
+               if i not in in_spread][: max(0, k - len(spread))]
+    order: list[int] = []
+    for j in range(max(len(spread), len(longest))):
+        for src in (spread, longest):
+            if j < len(src) and len(order) < k:
+                order.append(src[j])
+    return order
 
 
 def _cuts_ffmpeg(path: str, duration: float) -> list[float]:
@@ -181,8 +351,50 @@ def _place_subjects(positions: list[dict], aspect: float) -> list[dict]:
     return out
 
 
+def _burst_motion(frames: list[tuple[float, np.ndarray]]) -> dict | None:
+    """Camera movement from a burst of frames decoded around the middle of a shot (long films)."""
+    if len(frames) < 3:
+        return None
+    sm = []
+    for t, img in frames:
+        small = cv2.resize(img, (SAMPLE_W, max(2, int(SAMPLE_W * img.shape[0] / img.shape[1]))), interpolation=cv2.INTER_AREA)
+        sm.append(motion.Sample(t=t, gray=cv2.cvtColor(small, cv2.COLOR_BGR2GRAY), hist=None, bgr_small=None))
+    pairs = []
+    for a, b in zip(sm, sm[1:]):
+        try:
+            pm = motion.pair_motion(a, b)
+        except Exception:  # noqa: BLE001
+            pm = None
+        if pm is not None:
+            pairs.append(pm)
+    return motion.classify(pairs) if len(pairs) >= 2 else None
+
+
+def _limitations_engines(face: bool, sound: dict, text: dict) -> list[str]:
+    out = []
+    out.append("Faces: YuNet face detector (bundled) — used for shot size and to find close-ups and seated people."
+               if face else "Faces: not available (the YuNet model could not be loaded), so shot sizes rely on body "
+                            "detection or saliency.")
+    stt = (sound or {}).get("speech_to_text")
+    if isinstance(stt, dict):
+        v = stt.get("value")
+        if v in ("not available", "failed"):
+            out.append("Dialogue: " + (stt.get("note") or speech.NOT_AVAILABLE))
+        elif v:
+            dl = (sound.get("dialogue") or {}).get("value") or {}
+            out.append(f"Dialogue: transcribed on this computer with {v}" +
+                       (" (only the first part, within the time budget)." if dl.get("partial") else "."))
+    reading = (text or {}).get("reading") if isinstance(text, dict) else None
+    if isinstance(reading, dict):
+        out.append(f"On-screen text: read with {reading['engine']} ({reading.get('languages')})." if reading.get("available")
+                   else "On-screen text: " + titles.NOT_AVAILABLE + ".")
+    return out
+
+
 def run(proxy_path: str, keyframes: list[tuple[float, np.ndarray]], meta: dict,
-        progress: Callable[[float, str], None]) -> dict:
+        progress: Callable[[float, str], None], owner: str | None = None, lang: str = "en") -> dict:
+    t_start = time.monotonic()
+    budget = _budget_s()
     guard = _Guard()
     try:
         duration = float(meta.get("duration_s") or 0) or (max((t for t, _ in keyframes), default=0.0) + 0.5)
@@ -193,13 +405,15 @@ def run(proxy_path: str, keyframes: list[tuple[float, np.ndarray]], meta: dict,
     except (TypeError, ValueError, ZeroDivisionError, KeyError):
         aspect = (keyframes[0][1].shape[1] / keyframes[0][1].shape[0]) if keyframes else 16 / 9
     progress(0.02, "Sampling frames")
-    samples, decoder = _sample_video(proxy_path, duration, ENGINE["analysis_fps"], aspect, keyframes)
+    samples, decoder, collected = _sample_video(proxy_path, duration, ENGINE["analysis_fps"], aspect, keyframes)
     if not samples and not keyframes:
         from ..worker import UserFacingError
         raise UserFacingError("No picture could be decoded from this clip, so it can't be analysed. "
                               "Try exporting it again as MP4 (H.264) and uploading that.")
+    colour_samples = [(s.t, s.bgr_small) for s in samples if s.bgr_small is not None]
+    long_clip = duration > LONG_CLIP_S
     progress(0.22, "Detecting shot boundaries")
-    if duration > LONG_CLIP_S:
+    if long_clip:
         shots = guard("shot boundaries", lambda: _shots_from_cuts(_cuts_ffmpeg(proxy_path, duration), duration),
                       lambda: motion.detect_shots(samples, duration))
     else:
@@ -210,9 +424,17 @@ def run(proxy_path: str, keyframes: list[tuple[float, np.ndarray]], meta: dict,
 
     progress(0.3, "Estimating camera motion")
     shot_motion = []
+    si_ = 0
     for si, sh in enumerate(shots):
         def _mo(sh=sh):
-            sm = [s for s in samples if sh["start_s"] <= s.t < sh["end_s"]]
+            nonlocal si_
+            # samples are in time order: walk forward instead of scanning all of them for every shot
+            while si_ < len(samples) and samples[si_].t < sh["start_s"]:
+                si_ += 1
+            sm, j = [], si_
+            while j < len(samples) and samples[j].t < sh["end_s"]:
+                sm.append(samples[j])
+                j += 1
             pairs = []
             for a, b in zip(sm, sm[1:]):
                 try:
@@ -223,44 +445,49 @@ def run(proxy_path: str, keyframes: list[tuple[float, np.ndarray]], meta: dict,
                     pairs.append(pm)
             return motion.classify(pairs)
         shot_motion.append(guard("camera motion", _mo, lambda: motion.classify([])))
-        progress(0.3 + 0.3 * (si + 1) / len(shots), "Estimating camera motion")
+        if si % 25 == 0 or si == len(shots) - 1:
+            progress(0.3 + 0.2 * (si + 1) / len(shots), "Estimating camera motion")
 
-    progress(0.62, "Analysing colour and exposure")
-    kf_imgs = [img for _, img in keyframes] or [s.bgr_small for s in samples[:: max(1, len(samples) // 12)]]
+    progress(0.52, "Analysing colour and exposure")
+    kf_imgs = [img for _, img in keyframes] or [img for _, img in colour_samples[:: max(1, len(colour_samples) // 12)]]
     pick = kf_imgs[:: max(1, len(kf_imgs) // 24)]
     tone = guard("light and colour", lambda: color.tone_and_color(pick), lambda: color.tone_and_color([_NEUTRAL]))
     pal = guard("palette", lambda: color.palette(pick), lambda: [])
 
-    progress(0.7, "Detecting subjects and composition")
-    per_shot = []
+    progress(0.58, "Detecting subjects and composition")
     all_dets = []
-    # keyframes to use for subject/composition work: ingest keyframes, else the decoded samples
-    frames_for = keyframes or [(s.t, s.bgr_small) for s in samples]
-    if len(shots) > MAX_DETAILED_SHOTS:
+    # frames for subject/composition work on short clips: ingest keyframes, else the decoded samples
+    frames_for = keyframes or colour_samples
+    k = detail_target(len(shots), duration, budget)
+    if not long_clip and len(shots) > MAX_DETAILED_SHOTS:          # short clips: unchanged even spread
         step = len(shots) / MAX_DETAILED_SHOTS
-        detailed = {int(i * step) for i in range(MAX_DETAILED_SHOTS)}
+        order = sorted({int(i * step) for i in range(MAX_DETAILED_SHOTS)})
     else:
-        detailed = set(range(len(shots)))
-    light_template = None
-    for si, sh in enumerate(shots):
-        if si not in detailed:
-            if light_template is None:
-                c0 = composition.analyse_frame(_NEUTRAL)
-                c0.pop("_saliency")
-                light_template = {"shot_size": subjects.shot_size([], 0.3), "composition": c0,
-                                  "subjects": subjects.summarise([{"people": [], "faces": []}])}
-            lt = {k: {**v} if isinstance(v, dict) else v for k, v in _degrade(light_template).items()}
-            mid_t = (sh["start_s"] + sh["end_s"]) / 2
-            per_shot.append({**sh, "representative_t": round(mid_t, 3), **lt,
-                             "camera_angle": tag("undetermined (assume eye level)", 0.0, "estimated", PLACEHOLDER_NOTE),
-                             "camera_height": tag("about eye level", 0.0, "estimated", PLACEHOLDER_NOTE),
-                             "movement": shot_motion[si], "detailed": False,
-                             "scene_geometry": tag({"assumed_hfov_deg": ASSUMED_HFOV_DEG, "subjects_m": []}, 0.0, "estimated",
-                                                   PLACEHOLDER_NOTE)})
-            continue
-        kfs = [(t, img) for t, img in frames_for if sh["start_s"] <= t < sh["end_s"]] or \
-              [min(frames_for, key=lambda k: abs(k[0] - (sh["start_s"] + sh["end_s"]) / 2))]
-        mid = min(kfs, key=lambda k: abs(k[0] - (sh["start_s"] + sh["end_s"]) / 2))
+        order = detail_plan(shots, k)
+    deadline = t_start + budget * DETAIL_SHARE
+    done: dict[int, dict] = {}
+    budget_hit = False
+    for n_done, si in enumerate(order):
+        sh = shots[si]
+        if long_clip and n_done >= MAX_DETAILED_SHOTS and time.monotonic() > deadline:
+            budget_hit = True
+            break
+        burst = []
+        if long_clip:
+            mid = (sh["start_s"] + sh["end_s"]) / 2
+            span = min(1.5, max(0.25, (sh["end_s"] - sh["start_s"]) * 0.8))
+            fps = min(12.0, max(2.0, (BURST_FRAMES - 1) / span))
+            try:
+                burst = _ff_frames(proxy_path, max(sh["start_s"] + 0.04, mid - span / 2), span, fps, 640, aspect, BURST_FRAMES)
+            except Exception:  # noqa: BLE001 - fall back to keyframes / samples
+                burst = []
+            if burst:
+                bm = guard("camera motion", lambda: _burst_motion(burst), lambda: None)
+                if bm is not None:
+                    shot_motion[si] = bm
+        kfs = burst or [(t, img) for t, img in frames_for if sh["start_s"] <= t < sh["end_s"]] or \
+            [min(frames_for, key=lambda kf: abs(kf[0] - (sh["start_s"] + sh["end_s"]) / 2))]
+        mid = min(kfs, key=lambda kf: abs(kf[0] - (sh["start_s"] + sh["end_s"]) / 2))
 
         def _comp(img=mid[1]):
             c = composition.analyse_frame(img)
@@ -274,7 +501,7 @@ def run(proxy_path: str, keyframes: list[tuple[float, np.ndarray]], meta: dict,
 
         def _dets(kfs=kfs):
             out = []
-            for _, img in kfs[:: max(1, len(kfs) // 6)]:
+            for _, img in kfs[:: max(1, len(kfs) // (3 if burst else 6))]:
                 try:
                     out.append(subjects.detect(img))
                 except Exception:  # noqa: BLE001
@@ -294,7 +521,7 @@ def run(proxy_path: str, keyframes: list[tuple[float, np.ndarray]], meta: dict,
             geom = _place_subjects(subj["positions"]["value"], aspect)
         except Exception:  # noqa: BLE001
             geom = []
-        per_shot.append({
+        done[si] = {
             **sh,
             "representative_t": round(mid[0], 3),
             "shot_size": size,
@@ -306,15 +533,47 @@ def run(proxy_path: str, keyframes: list[tuple[float, np.ndarray]], meta: dict,
             "subjects": subj,
             "scene_geometry": tag({"assumed_hfov_deg": ASSUMED_HFOV_DEG, "subjects_m": geom}, 0.2, "estimated",
                                   "Rough metres from camera assuming average human size and a ~55° lens. Use for previs only."),
-        })
-        progress(0.7 + 0.15 * (si + 1) / len(shots), "Detecting subjects and composition")
+        }
+        if n_done % 10 == 0 or n_done == len(order) - 1:
+            progress(0.58 + 0.27 * (n_done + 1) / max(1, len(order)), "Detecting subjects and composition")
+
+    per_shot = []
+    light_template = None
+    for si, sh in enumerate(shots):
+        if si in done:
+            per_shot.append(done[si])
+            continue
+        if light_template is None:
+            c0 = composition.analyse_frame(_NEUTRAL)
+            c0.pop("_saliency")
+            light_template = {"shot_size": subjects.shot_size([], 0.3), "composition": c0,
+                              "subjects": subjects.summarise([{"people": [], "faces": []}])}
+        lt = {k_: {**v} if isinstance(v, dict) else v for k_, v in _degrade(light_template).items()}
+        mid_t = (sh["start_s"] + sh["end_s"]) / 2
+        per_shot.append({**sh, "representative_t": round(mid_t, 3), **lt,
+                         "camera_angle": tag("undetermined (assume eye level)", 0.0, "estimated", PLACEHOLDER_NOTE),
+                         "camera_height": tag("about eye level", 0.0, "estimated", PLACEHOLDER_NOTE),
+                         "movement": shot_motion[si], "detailed": False,
+                         "scene_geometry": tag({"assumed_hfov_deg": ASSUMED_HFOV_DEG, "subjects_m": []}, 0.0, "estimated",
+                                               PLACEHOLDER_NOTE)})
+    n_detailed = len(done)
 
     progress(0.86, "Listening to the sound")
-    sound = guard("sound", lambda: audio.analyse(proxy_path, duration, bool(meta.get("audio_codec"))),
+    sound = guard("sound", lambda: audio.analyse(proxy_path, duration, bool(meta.get("audio_codec")), transcribe=True,
+                                                 owner=owner, budget_s=budget),
                   lambda: {"present": tag(None, 0.0, "observed")})
     progress(0.89, "Looking for titles and credits")
-    text_frames = [(s.t, s.bgr_small) for s in samples] or [(t, img) for t, img in keyframes]
-    on_screen_text = guard("titles and credits", lambda: titles.detect(text_frames, duration), lambda: tag([], 0.0, "estimated"))
+    if collected.text_hits or decoder != "none":
+        hits, step = collected.text_hits, ((samples[1].t - samples[0].t) if len(samples) > 1 else 1.0)
+    else:
+        hits = [h for h in (titles.frame_hit(t, img) for t, img in keyframes) if h]
+        step = (keyframes[1][0] - keyframes[0][0]) if len(keyframes) > 1 else 1.0
+    by_t = {round(t, 3): img for t, img in colour_samples}
+    on_screen_text = guard("titles and credits",
+                           lambda: titles.detect_from_hits(hits, step, duration,
+                                                           frame_at=(lambda t: _frame_at(proxy_path, t)) if decoder != "keyframes" else None,
+                                                           lang=lang, small_at=lambda t: by_t.get(round(t, 3))),
+                           lambda: tag([], 0.0, "estimated"))
 
     progress(0.92, "Reading environment and mood")
     try:
@@ -336,23 +595,32 @@ def run(proxy_path: str, keyframes: list[tuple[float, np.ndarray]], meta: dict,
         if a["shot_size"]["value"] != b["shot_size"]["value"]:
             composition_changes.append(f"Shot {a['index'] + 1}→{b['index'] + 1}: {a['shot_size']['value']} → {b['shot_size']['value']}")
     progress(0.98, "Finalising")
+    face_ok = subjects.face_model_available()
     limitations = [
         "Exact camera body, lens, focal length and lighting equipment cannot be recovered from video.",
         "Values marked 'estimated' come from models that can be wrong; 'heuristic' values are interpretations.",
-        "Face detection is " + ("enabled." if subjects.face_model_available() else "not configured, so shot sizes rely on body detection or saliency."),
     ]
+    limitations += _limitations_engines(face_ok, sound, on_screen_text)
     if decoder == "keyframes":
         limitations.append("The clip could only be read through its extracted keyframes, so camera-motion and cut "
                            "detection are coarse.")
-    if len(shots) > MAX_DETAILED_SHOTS:
+    if n_detailed < len(shots):
+        how = ("spread evenly through the film plus the longest shots" if long_clip else "evenly spread representative shots")
         limitations.append(f"This video has {len(shots)} shots; framing and people were analysed in detail on "
-                           f"{MAX_DETAILED_SHOTS} evenly spread representative shots. The others show cut timing and "
-                           "camera movement only.")
+                           f"{n_detailed} {how}. The others show cut timing and camera movement only." +
+                           (" The time budget for detailed analysis was reached." if budget_hit else ""))
     if guard.failed:
         limitations.append("Some parts could not be measured on this clip and show neutral placeholders with zero "
                            "confidence: " + ", ".join(guard.failed) + ".")
+    stt = (sound.get("speech_to_text") or {}).get("value") if isinstance(sound, dict) else None
+    reading = on_screen_text.get("reading") if isinstance(on_screen_text, dict) else None
+    detectors = list(ENGINE["detectors"]) + (["yunet-faces"] if face_ok else [])
     return {
-        "engine": {**ENGINE, "decoder": decoder, "failed_steps": guard.failed},
+        "engine": {**ENGINE, "detectors": detectors, "decoder": decoder, "failed_steps": guard.failed,
+                   "detailed_shots": n_detailed,
+                   "faces": "yunet" if face_ok else None,
+                   "speech_to_text": stt if stt not in (None, "not available", "failed") else None,
+                   "ocr": (reading or {}).get("engine") if (reading or {}).get("available") else None},
         "clip": {"duration_s": tag(duration, 1.0, "observed"),
                  "resolution": tag(f"{meta.get('width')}×{meta.get('height')}", 1.0, "observed"),
                  "fps": tag(meta.get("fps"), 1.0, "observed"), "aspect": tag(round(aspect, 3), 1.0, "observed"),

@@ -88,6 +88,12 @@ def build(analysis: dict, assessment: dict | None) -> dict:
     ns = [(_v(s["composition"].get("negative_space")) or 0) for s in detailed if _c(s.get("composition", {}).get("negative_space")) > 0]
     if ns and sum(ns) / len(ns) > 0.62:
         F.append(_f("composition", "comp.space", "good", confidence=0.45, pct=round(100 * sum(ns) / len(ns))))
+    face_sized = [(s["index"], s["shot_size"]) for s in detailed
+                  if isinstance(s.get("shot_size"), dict) and s["shot_size"].get("source") == "face" and _c(s["shot_size"]) > 0]
+    if face_sized:
+        abbrs = list(dict.fromkeys(z.get("abbr") or _v(z) for _, z in face_sized))
+        F.append(_f("composition", "comp.face_sizes", "good", "estimated", 0.6, n=len(face_sized),
+                    sizes=", ".join(abbrs)))
     dofs = [_v(s["composition"].get("depth_of_field"), "") or "" for s in detailed if _c(s.get("composition", {}).get("depth_of_field")) > 0]
     if dofs:
         shallow = sum("shallow" in d for d in dofs) >= len(dofs) / 2
@@ -168,6 +174,7 @@ def build(analysis: dict, assessment: dict | None) -> dict:
         if inner:
             F.append(_f("sound", "snd.gaps", "improve", "observed", 0.6, n=len(inner),
                         secs=round(sum(g["end_s"] - g["start_s"] for g in inner), 1)))
+        F.extend(_dialogue_findings(snd))
 
     # editing
     n = len(shots)
@@ -191,6 +198,7 @@ def build(analysis: dict, assessment: dict | None) -> dict:
         caps = [s for s in txt if s["kind"].startswith("caption")]
         if caps:
             F.append(_f("titles", "titles.captions", "good", "estimated", 0.4, n=len(caps)))
+        F.extend(_text_findings(analysis.get("on_screen_text") or {}, txt))
     elif "on_screen_text" in analysis:
         F.append(_f("titles", "titles.none", "good", "estimated", 0.35))
 
@@ -209,6 +217,65 @@ def build(analysis: dict, assessment: dict | None) -> dict:
             "alternatives": alternatives,
             "scores": {d["id"]: (100 if d["status"] == "good" else 70 if d["status"] == "improve" else 40
                                  if d["status"] == "problem" else None) for d in departments}}
+
+
+def _mmss(t: float) -> str:
+    t = max(0, int(round(float(t or 0))))
+    return f"{t // 3600}:{t % 3600 // 60:02d}:{t % 60:02d}" if t >= 3600 else f"{t // 60}:{t % 60:02d}"
+
+
+def _dialogue_findings(snd: dict) -> list[dict]:
+    """Findings from speech-to-text (when an engine was available)."""
+    out = []
+    stt = _v(snd.get("speech_to_text"))
+    if stt in ("not available", "failed"):
+        out.append(_f("sound", "snd.stt_missing", "unknown", "observed", 1.0))
+        return out
+    d = _v(snd.get("dialogue"))
+    if not isinstance(d, dict) or not d.get("segments"):
+        return out
+    conf = _c(snd.get("dialogue"))
+    wpm = d.get("words_per_minute")
+    out.append(_f("sound", "snd.dialogue", "good", "estimated", conf, mins=round(d.get("speech_s", 0) / 60, 1),
+                  lang=d.get("language") or "?", wpm=wpm if wpm is not None else "—"))
+    if d.get("buried"):
+        out.append(_f("sound", "snd.dialogue_buried", "problem", "estimated", conf * 0.8, n=len(d["buried"]),
+                      at=d["buried"][0]["at"]))
+    if d.get("unclear"):
+        out.append(_f("sound", "snd.mumbled", "improve", "estimated", conf * 0.7, n=len(d["unclear"]), at=d["unclear"][0]["at"]))
+    if d.get("dead_air"):
+        out.append(_f("sound", "snd.dead_air", "improve", "estimated", conf * 0.8, n=len(d["dead_air"]),
+                      secs=round(sum(x["end_s"] - x["start_s"] for x in d["dead_air"]), 1), at=d["dead_air"][0]["at"]))
+    if d.get("fast"):
+        out.append(_f("sound", "snd.fast_delivery", "improve", "estimated", conf * 0.7, n=len(d["fast"]),
+                      wpm=max(x.get("wpm") or 0 for x in d["fast"]), at=d["fast"][0]["at"]))
+    if d.get("slow"):
+        out.append(_f("sound", "snd.slow_delivery", "improve", "estimated", conf * 0.6, n=len(d["slow"]),
+                      wpm=min(x.get("wpm") or 0 for x in d["slow"]), at=d["slow"][0]["at"]))
+    return out
+
+
+def _text_findings(ost: dict, segs: list[dict]) -> list[dict]:
+    """Readability of on-screen text: reading time (needs OCR), title-safe area and contrast."""
+    out = []
+    reading = ost.get("reading") if isinstance(ost, dict) else None
+    if isinstance(reading, dict) and not reading.get("available"):
+        out.append(_f("titles", "titles.ocr_missing", "unknown", "observed", 1.0))
+    read = [s for s in segs if s.get("words")]
+    if read:
+        out.append(_f("titles", "titles.read", "good", "estimated", 0.5, n=len(read), words=sum(s["words"] for s in read)))
+    for s in read:
+        if s["words"] >= 2 and s["on_screen_s"] < s.get("needed_s", 0):
+            out.append(_f("titles", "titles.too_short_to_read", "improve", "estimated", 0.5, kind=s["kind"],
+                          at=_mmss(s["start_s"]), words=s["words"], secs=s["on_screen_s"], need=s["needed_s"]))
+    unsafe = [s for s in segs if s.get("title_safe") is False]
+    if unsafe:
+        out.append(_f("titles", "titles.unsafe", "improve", "estimated", 0.45, n=len(unsafe), at=_mmss(unsafe[0]["start_s"])))
+    low = [s for s in segs if isinstance(s.get("contrast_ratio"), (int, float)) and s["contrast_ratio"] < 3.0]
+    if low:
+        out.append(_f("titles", "titles.low_contrast", "improve", "estimated", 0.45, n=len(low),
+                      at=_mmss(low[0]["start_s"]), ratio=min(s["contrast_ratio"] for s in low)))
+    return out
 
 
 def edit_options(analysis: dict) -> list[dict]:

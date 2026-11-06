@@ -1,0 +1,12 @@
+# Optional extras. CineVision works without them; each one switches on a feature when it is installed.
+#
+# Speech to text for the Director's review (dialogue level, pace, unclear lines). Runs on this computer.
+# The model named by CINEVISION_WHISPER_MODEL (default "small", ~500 MB) is downloaded once on first use;
+# set it to a local folder to stay fully offline. Without this package, a local AI server with an
+# OpenAI-compatible /v1/audio/transcriptions endpoint on 127.0.0.1 is used if you switched local AI on.
+faster-whisper>=1.0
+#
+# Reading on-screen text (titles, credits) needs the Tesseract OCR program, not a Python package:
+#   Windows: https://github.com/UB-Mannheim/tesseract/wiki  (default path is detected)
+#   macOS:   brew install tesseract tesseract-lang
+#   Linux:   apt install tesseract-ocr (+ tesseract-ocr-<lang> for other languages)

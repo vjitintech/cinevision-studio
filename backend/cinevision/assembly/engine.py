@@ -249,6 +249,9 @@ def assemble(clips: list[dict], script: str | None) -> dict:
         for b in ordered[i + 1:]:
             if a["id"] in dup_of or b["id"] in dup_of:
                 continue
+            # a different frame shape is already its own flag; such clips are not interchangeable takes
+            if any(x["code"] == "look_aspect" for x in flags[a["id"]] + flags[b["id"]]):
+                continue
             if a["setting"][:5] == b["setting"][:5] and a["time"] == b["time"] and _look_distance(a, b) < 0.06 \
                     and abs(a["duration"] - b["duration"]) <= max(1.0, 0.25 * max(a["duration"], b["duration"])) \
                     and abs(a["size_rank"] - b["size_rank"]) < 0.6:
