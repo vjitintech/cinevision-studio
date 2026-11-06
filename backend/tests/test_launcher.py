@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import uuid
 
@@ -21,23 +22,22 @@ def _env(home):
 
 
 def _start(home, port):
-    return subprocess.Popen([sys.executable, "-m", "cinevision.launcher", "--no-browser", "--port", str(port)],
+    proc = subprocess.Popen([sys.executable, "-m", "cinevision.launcher", "--no-browser", "--port", str(port)],
                             cwd=BACKEND, env=_env(home), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, encoding="utf-8", errors="replace")
+    proc.lines = []          # read continuously so the "ready" line is captured however fast the test runs
+    threading.Thread(target=lambda: proc.lines.extend(proc.stdout), daemon=True).start()
+    return proc
 
 
 def _wait(port, proc, timeout=120):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        assert proc.poll() is None, proc.stdout.read()
-        try:
-            c = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
-            c.request("GET", "/api/health")
-            if c.getresponse().status == 200:
-                return
-        except OSError:
-            time.sleep(0.2)
-    raise TimeoutError
+        assert proc.poll() is None, "".join(proc.lines)
+        if any("CineVision is ready" in line for line in proc.lines):
+            return               # the launcher only says "ready" after the server answers
+        time.sleep(0.2)
+    raise TimeoutError("".join(proc.lines))
 
 
 def _stop(proc):
@@ -47,7 +47,8 @@ def _stop(proc):
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait(10)
-    return proc.stdout.read()
+    time.sleep(0.2)
+    return "".join(proc.lines)
 
 
 def _post(port, path, body, cookie=None):
