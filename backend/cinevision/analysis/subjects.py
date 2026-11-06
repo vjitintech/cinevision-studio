@@ -31,9 +31,14 @@ _face_loaded = False
 _face_path: str | None = None
 
 
+def hog_available() -> bool:
+    """OpenCV 5 moved the HOG people detector to the contrib build; plain opencv-python has no HOGDescriptor."""
+    return hasattr(cv2, "HOGDescriptor")
+
+
 def _get_hog():
     global _hog
-    if _hog is None:
+    if _hog is None and hog_available():
         _hog = cv2.HOGDescriptor()
         _hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
     return _hog
@@ -50,7 +55,8 @@ def face_model_available() -> bool:
 
 
 def detector_name() -> str:
-    return "yunet-faces+hog-people" if face_model_available() else "hog-people"
+    parts = (["yunet-faces"] if face_model_available() else []) + (["hog-people"] if hog_available() else [])
+    return "+".join(parts) or "none"
 
 
 def _get_face(w, h):
@@ -141,7 +147,9 @@ def detect(bgr: np.ndarray) -> dict:
                 faces.append([fx, fy, fw, fh, sc])
         faces = _nms(faces, 0.3)
 
-    rects, weights = _get_hog().detectMultiScale(img, winStride=(8, 8), padding=(8, 8), scale=1.06)
+    hog = _get_hog()
+    rects, weights = (hog.detectMultiScale(img, winStride=(8, 8), padding=(8, 8), scale=1.06) if hog is not None
+                      else ((), ()))   # no body detector in this OpenCV build: people come from faces only
     cand = []
     for (x, y, rw, rh), sc in zip(rects, np.ravel(weights) if len(rects) else []):
         # confident, person-shaped, not cut off by the left/right frame edge, and a sane size
@@ -188,7 +196,7 @@ def detect(bgr: np.ndarray) -> dict:
         return out
 
     return {"people": [norm(p, p[5]) for p in people], "faces": [norm(f) for f in faces],
-            "detector": "yunet+hog" if fd is not None else "hog"}
+            "detector": "+".join((["yunet"] if fd is not None else []) + (["hog"] if hog is not None else [])) or "none"}
 
 
 # face height (share of frame height) → shot size. YuNet's box runs from the brow to the chin (~19 cm on an adult):
