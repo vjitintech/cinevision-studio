@@ -47,7 +47,7 @@ $stamp = ".venv\requirements.sha256"
 if (-not (Test-Path $stamp) -or (Get-Content $stamp -Raw).Trim() -ne $reqHash) {
   Write-Host "Updating Python packages for this version..."
   # The plain and contrib OpenCV builds both provide 'cv2'; only the contrib build may stay.
-  & .venv\Scripts\python.exe -m pip uninstall -y -q opencv-python-headless opencv-python 2>$null | Out-Null
+  cmd /c ".venv\Scripts\python.exe -m pip uninstall -y -q opencv-python-headless opencv-python >nul 2>&1"
   & .venv\Scripts\python.exe -m pip install -q -r backend\requirements.txt
   if ($LASTEXITCODE -ne 0) { Fail "Updating Python packages failed (see the messages above). Run this script again." }
   Set-Content -Path $stamp -Value $reqHash -Encoding ascii

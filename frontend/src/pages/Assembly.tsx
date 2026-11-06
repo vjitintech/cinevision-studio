@@ -84,12 +84,17 @@ export function AssemblyPage({ aid }: { aid: string }) {
   const [removing, setRemoving] = useState<Set<string>>(() => new Set());
   const [deleting, setDeleting] = useState(false);
   const gen = useRef(0);          // bumped when a delete starts: a load that began earlier is stale and is dropped
+  const deletingRef = useRef(false);  // set synchronously, so a poll tick that fires before React re-renders sends nothing
   const input = useRef<HTMLInputElement>(null);
 
+  const inflight = useRef<Promise<unknown> | null>(null);   // a refresh still on its way to the server
   const load = useCallback(async () => {
     const g = gen.current;
+    if (deletingRef.current) return;
     try {
-      const r = await api("GET", `/api/assemblies/${aid}?lang=${lang}`);
+      const req = api("GET", `/api/assemblies/${aid}?lang=${lang}`);
+      inflight.current = req.catch(() => undefined);
+      const r = await req;
       if (g !== gen.current) return;
       setA((prev: any) => ({ ...r, clips: keepThumbs(prev?.clips, r.clips) }));
       setScript((s) => (s === null ? r.script : s));
@@ -149,10 +154,12 @@ export function AssemblyPage({ aid }: { aid: string }) {
   const removeAll = async () => {
     if (!confirmDelete()) return;
     gen.current++;
+    deletingRef.current = true;
     setDeleting(true);                                    // stops polling; nothing new is requested
     await thumbsSettled();
+    await inflight.current;                               // let a refresh already sent finish before deleting
     try { await api("DELETE", `/api/assemblies/${aid}`); navigate("/"); }
-    catch (e) { setDeleting(false); setError(e instanceof ApiError ? e.message : "Could not delete it."); }
+    catch (e) { deletingRef.current = false; setDeleting(false); setError(e instanceof ApiError ? e.message : "Could not delete it."); }
   };
   const [confirming, setConfirming] = useState(false);
   const confirmDelete = () => { if (!confirming) { setConfirming(true); return false; } return true; };
