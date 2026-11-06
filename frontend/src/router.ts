@@ -39,3 +39,12 @@ export function linkTo(path: string) {
     },
   };
 }
+
+/** Delete something whose page is open: leave the page first (its refreshes and pictures stop), let requests
+ *  already sent finish, then delete and go to the dashboard. If the delete fails, go back to `back`. */
+export async function leaveThenDelete(del: () => Promise<unknown>, back: string): Promise<void> {
+  navigate("/deleting", true);
+  await new Promise((r) => setTimeout(r, 600));
+  try { await del(); navigate("/", true); }
+  catch { navigate(back, true); }
+}

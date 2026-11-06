@@ -68,6 +68,7 @@ export function App() {
   else if (path === "/learn") page = <LearnPage />;
   else if (path === "/assembly/new") page = <NewAssembly key={navCount} />;
   else if (/^\/a\/[0-9a-f-]{36}$/.test(path)) page = <AssemblyPage key={path} aid={path.slice(3)} />;
+  else if (path === "/deleting") page = <p className="muted" role="status">{t("deleting")}</p>;
   else if (path === "/security") page = session.mode === "browser" ? <BrowserPrivacyPage /> : <SecurityPage session={session} onChange={refresh} />;
   else page = <Dashboard />;
 

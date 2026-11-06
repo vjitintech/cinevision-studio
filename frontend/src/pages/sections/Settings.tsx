@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api, ApiError } from "../../api";
 import { ControlsForm, DEFAULT_CONTROLS } from "../../components/ControlsForm";
 import { ErrorNote, Labeled } from "../../components/common";
-import { navigate } from "../../router";
+import { leaveThenDelete, navigate } from "../../router";
 import type { Controls } from "../../types";
 import { useWS } from "../Workspace";
 
@@ -43,8 +43,7 @@ export const SettingsSection = {
     };
     const del = async () => {
       setBusy(true);
-      try { await api("DELETE", `/api/projects/${ws.pid}`); navigate("/", true); }
-      catch (e) { setError(e instanceof ApiError ? e.message : "Delete failed."); setBusy(false); }
+      await leaveThenDelete(() => api("DELETE", `/api/projects/${ws.pid}`), `/p/${ws.pid}/settings`);
     };
     return (
       <div className="stack">

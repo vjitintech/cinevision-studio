@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, BROWSER, uploadClip } from "../api";
-import { linkTo, navigate } from "../router";
+import { linkTo, leaveThenDelete, navigate } from "../router";
 import { ErrorNote, Labeled, usePoll } from "../components/common";
 import { useT } from "../i18n";
 import { fmtTime } from "../previs/math";
@@ -158,8 +158,7 @@ export function AssemblyPage({ aid }: { aid: string }) {
     setDeleting(true);                                    // stops polling; nothing new is requested
     await thumbsSettled();
     await inflight.current;                               // let a refresh already sent finish before deleting
-    try { await api("DELETE", `/api/assemblies/${aid}`); navigate("/"); }
-    catch (e) { deletingRef.current = false; setDeleting(false); setError(e instanceof ApiError ? e.message : "Could not delete it."); }
+    await leaveThenDelete(() => api("DELETE", `/api/assemblies/${aid}`), `/a/${aid}`);
   };
   const [confirming, setConfirming] = useState(false);
   const confirmDelete = () => { if (!confirming) { setConfirming(true); return false; } return true; };

@@ -56,6 +56,7 @@ const EN = {
     learn_title: "Learn directing", learn_intro: "Short lessons on each craft — what to watch for, why it matters, and what to do. Every lesson is the same reasoning the Director's review uses on your videos, so you learn from your own footage.",
     learn_focus: "Practise next (from your videos):", learn_none: "Upload a video to see which lessons matter most for your work.",
     learn_exercise: "Exercise:", learn_symptom: "You'll notice", learn_why: "Why it matters:", learn_do: "What to do:", learn_seen: "seen {n}× in your videos",
+    deleting: "Deleting…",
     how_to_install: "How to install colibri (free)", only_owner: "Only the owner or an admin can change AI settings.",
     auth_first_owner: "The first account becomes the owner of this CineVision.", auth_invite: "Invite code",
     auth_invite_hint: "Ask the owner of this CineVision for a code.", auth_closed: "New accounts can't be created on this CineVision. Ask its owner.",
