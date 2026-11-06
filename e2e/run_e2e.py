@@ -76,7 +76,8 @@ def main():
            "CINEVISION_COOKIE_SECURE": "false", "CINEVISION_PUBLIC_ORIGIN": origin, "CINEVISION_EMBEDDED_WORKER": "true",
            "CINEVISION_FRONTEND_DIST": str(ROOT / "frontend" / "dist"), "PYTHONPATH": str(ROOT / "backend")}
     log = open(data / "server.log", "w")
-    srv = subprocess.Popen([sys.executable, "-m", "uvicorn", "cinevision.app:create_app", "--factory", "--port", str(port)],
+    srv = subprocess.Popen([sys.executable, "-m", "uvicorn", "cinevision.app:create_app", "--factory", "--port", str(port),
+                            "--no-access-log"],   # as in production: uvicorn's access log would record signed media URLs
                            cwd=ROOT / "backend", env=env, stdout=log, stderr=log)
     errors: list[str] = []
     try:
