@@ -8,7 +8,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from .. import audit, db, security
+from .. import audit, db, roles, security
 from ..config import settings
 from ..keys import keyring
 from ..web import ApiError, client_ip, current, ok, parse
@@ -19,6 +19,10 @@ GENERIC_LOGIN_ERROR = "Email or password is incorrect."
 class Credentials(BaseModel):
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=1, max_length=256)
+
+
+class RegisterBody(Credentials):
+    invite: str | None = Field(default=None, max_length=64)
 
 
 class CodeBody(BaseModel):
@@ -47,9 +51,13 @@ def _norm_email(e: str) -> str:
 
 
 def registration_open() -> bool:
-    if settings().allow_registration:
-        return True
-    return db.one("SELECT 1 FROM users LIMIT 1") is None
+    return roles.signup_state()["open"]
+
+
+class _SignupRefused(Exception):
+    def __init__(self, status: int, code: str, message: str):
+        super().__init__(code)
+        self.err = ApiError(status, code, message)
 
 
 def _set_cookie(resp: JSONResponse, token: str) -> None:
@@ -66,7 +74,7 @@ def _rate(key: str, limit: int, window: int) -> None:
 async def session_info(request: Request):
     sess = security.load_session(request.cookies.get(security.SESSION_COOKIE))
     out = {"authenticated": False, "mfa_required": False, "user": None, "csrf_token": None,
-           "registration_open": registration_open(), "mode": settings().mode}
+           "registration_open": registration_open(), "signup": roles.signup_state(), "mode": settings().mode}
     if sess:
         user = db.one("SELECT id,email,mfa_enabled FROM users WHERE id = ?", (sess["user_id"],))
         if user:
@@ -80,23 +88,41 @@ async def session_info(request: Request):
 async def register(request: Request):
     ip = client_ip(request)
     _rate(f"register:{ip}", 5, 3600)
-    body = await parse(request, Credentials)
-    if not registration_open():
-        raise ApiError(403, "registration_closed", "Registration is closed on this private instance.")
+    body = await parse(request, RegisterBody)
+    state = roles.signup_state()
+    if not state["open"]:
+        raise ApiError(403, "registration_closed", "Sign-up is closed on this CineVision. Ask the owner to add you.")
+    if state["invite_required"] and not (body.invite or "").strip():
+        raise ApiError(403, "invite_required", "You need an invite code from the owner to create an account here.")
     email = _norm_email(body.email)
     problems = security.password_problems(body.password, email)
     if problems:
         raise ApiError(422, "weak_password", " ".join(problems))
     uid = db.new_id()
+    mode = settings().signup_mode
+    pw_hash = security.hash_password(body.password)
+    used_invite = False
     try:
         with db.tx() as c:
+            first = c.execute("SELECT 1 FROM users LIMIT 1").fetchone() is None
+            if not first and mode == "closed":
+                raise _SignupRefused(403, "registration_closed", "Sign-up is closed on this CineVision. Ask the owner to add you.")
+            if c.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone():
+                raise _SignupRefused(409, "registration_failed", "Could not register with these details.")
             c.execute("INSERT INTO users(id,email,password_hash,created_at) VALUES (?,?,?,?)",
-                      (uid, email, security.hash_password(body.password), db.now_iso()))
+                      (uid, email, pw_hash, db.now_iso()))
             c.execute("INSERT INTO privacy_settings(user_id) VALUES (?)", (uid,))
+            if not first and mode == "owner_only":
+                if not roles.consume_invite(c, body.invite or "", uid):
+                    raise _SignupRefused(403, "invalid_invite", "That invite code isn't valid, has expired or was already used.")
+                used_invite = True
+    except _SignupRefused as e:
+        audit.record("auth.register", user_id=None, outcome="denied", ip=ip, details={"reason": e.err.code})
+        raise e.err from None
     except Exception:
         # don't reveal whether the address exists
-        raise ApiError(409, "registration_failed", "Could not register with these details.")
-    audit.record("auth.register", user_id=uid, ip=ip)
+        raise ApiError(409, "registration_failed", "Could not register with these details.") from None
+    audit.record("auth.register", user_id=uid, ip=ip, details={"invite": True} if used_invite else None)
     token, csrf = security.create_session(uid, True, request.headers.get("user-agent"))
     resp = ok({"authenticated": True, "csrf_token": csrf, "user": {"id": uid, "email": email, "mfa_enabled": False}}, 201)
     _set_cookie(resp, token)

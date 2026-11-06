@@ -4,12 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from conftest import PASSWORD, Client, wait_jobs
+from conftest import DRAWTEXT_FONT, PASSWORD, Client, wait_jobs
 
 SAMPLES = Path(__file__).resolve().parents[2] / "samples"
 CARD = ("drawtext=text='{t}':fontcolor=white:fontsize=64:x=(w-tw)/2:y=280,"
         "drawtext=text='{s}':fontcolor=white:fontsize=36:x=(w-tw)/2:y=400,"
-        "drawtext=text='Music by Another Person':fontcolor=white:fontsize=36:x=(w-tw)/2:y=460")
+        "drawtext=text='Music by Another Person':fontcolor=white:fontsize=36:x=(w-tw)/2:y=460").replace("drawtext=", "drawtext=" + DRAWTEXT_FONT)
 
 
 def _ff(*args):

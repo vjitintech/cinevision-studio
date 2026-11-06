@@ -9,7 +9,7 @@ from .keys import keyring
 
 log = logging.getLogger("cinevision.audit")
 
-_ALLOWED_DETAIL_KEYS = {"reason", "format", "kind", "count", "provider", "providers", "method", "status", "bytes"}
+_ALLOWED_DETAIL_KEYS = {"reason", "format", "kind", "count", "provider", "providers", "method", "status", "bytes", "invite", "role"}
 
 
 def record(event: str, *, user_id: str | None, outcome: str = "success", target_type: str | None = None,

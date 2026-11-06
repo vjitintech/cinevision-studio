@@ -69,7 +69,7 @@ def run(cmd: list[str], limits: Limits | None = None, cwd: str | None = None) ->
                 proc.kill()
             else:
                 os.killpg(proc.pid, signal.SIGKILL)
-        except ProcessLookupError:
+        except (ProcessLookupError, PermissionError, OSError):  # already exited (Windows raises PermissionError)
             pass
         proc.communicate()
         raise SandboxError("media tool timed out")

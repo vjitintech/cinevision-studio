@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import type { Session } from "../App";
 import { ErrorNote, Labeled } from "../components/common";
+import { useT } from "../i18n";
 
 export function SecurityPage({ session, onChange }: { session: Session; onChange: () => void }) {
   const [privacy, setPrivacy] = useState<any>(null);
@@ -27,6 +28,7 @@ export function SecurityPage({ session, onChange }: { session: Session; onChange
     <div className="page">
       <h1>Security & privacy</h1>
       <p className="muted">This is a {caps.mode === "local" ? "local, single-machine" : "private-server"} deployment. Telemetry: none. External AI calls: off unless you consent below.</p>
+      <ExposureBanner />
       <ErrorNote error={error} />
       {msg && <p className="small" style={{ color: "var(--ok)" }}>{msg}</p>}
 
@@ -58,6 +60,8 @@ export function SecurityPage({ session, onChange }: { session: Session; onChange
           <button onClick={() => savePrivacy(privacy)}>Save retention</button>
         </section>
       </div>
+
+      <AccountsPanel />
 
       <h2 style={{ marginTop: 32 }}>AI services</h2>
       <p className="muted">Built-in engines run here. Optional services are listed with exactly what they would receive.</p>
@@ -163,5 +167,90 @@ function PasswordPanel() {
       {msg && <p className="small" style={{ color: "var(--ok)" }}>{msg}</p>}
       <ErrorNote error={error} />
     </details>
+  );
+}
+
+function useSecurityStatus() {
+  const [st, setSt] = useState<any>(null);
+  useEffect(() => { api("GET", "/api/admin/security").then(setSt).catch(() => setSt(null)); }, []);
+  return st;
+}
+
+/** Shown when the server is reachable from other computers over plain http with open sign-up. */
+function ExposureBanner() {
+  const { t } = useT();
+  const st = useSecurityStatus();
+  if (!st?.exposure?.warning) return null;
+  return (
+    <div className="notice warm" role="alert" style={{ marginTop: 12 }}>
+      <strong>{t("sec_exposed_title")}</strong>
+      <p className="small" style={{ margin: "6px 0 0" }}>{t("sec_exposed_body", { host: st.exposure.host })}</p>
+    </div>
+  );
+}
+
+/** Sign-up mode, admins (owner only) and invite codes (owner and admins). */
+function AccountsPanel() {
+  const { t } = useT();
+  const st = useSecurityStatus();
+  const [users, setUsers] = useState<any[]>([]);
+  const [invites, setInvites] = useState<any[]>([]);
+  const [code, setCode] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const isOwner = !!st?.me?.is_owner, isAdmin = !!st?.me?.is_admin;
+  const load = async () => {
+    if (isOwner) setUsers((await api("GET", "/api/admin/users")).users);
+    if (isAdmin) setInvites((await api("GET", "/api/admin/invites")).invites);
+  };
+  useEffect(() => { if (st) load().catch((e) => setError(e.message)); }, [st]);
+  const run = async (fn: () => Promise<void>) => { setError(null); try { await fn(); await load(); } catch (e) { setError(e instanceof ApiError ? e.message : "Failed."); } };
+  if (!st) return null;
+  const modeText = { open: t("signup_open"), owner_only: t("signup_owner_only"), closed: t("signup_closed") }[st.signup.mode as "open"] || st.signup.mode;
+  const roleText = (r: string) => (r === "owner" ? t("role_owner") : r === "admin" ? t("role_admin") : t("role_member"));
+  return (
+    <section style={{ marginTop: 32 }}>
+      <h2>{t("sec_accounts")}</h2>
+      <div className="fact"><div className="v">{t("sec_signup", { mode: modeText })}</div>
+        <div className="why">{t("sec_you_are", { role: roleText(st.me.role) })}</div></div>
+      <ErrorNote error={error} />
+      {isOwner && users.length > 0 && (
+        <>
+          <p className="small muted">{t("sec_admin_help")}</p>
+          <div className="scroll-x">
+            <table className="list"><tbody>{users.map((u) => (
+              <tr key={u.id}>
+                <td>{u.email}</td><td>{roleText(u.role)}</td>
+                <td>{u.role !== "owner" && (
+                  <button onClick={() => run(async () => { await api("PUT", `/api/admin/users/${u.id}/role`, { admin: u.role !== "admin" }); })}>
+                    {u.role === "admin" ? t("sec_remove_admin") : t("sec_make_admin")}
+                  </button>
+                )}</td>
+              </tr>
+            ))}</tbody></table>
+          </div>
+        </>
+      )}
+      {isAdmin && (
+        <>
+          <h3 style={{ marginTop: 20 }}>{t("sec_invites")}</h3>
+          {st.signup.mode === "open" && <p className="small faint">{t("sec_invite_open_note")}</p>}
+          <button onClick={() => run(async () => { setCode((await api("POST", "/api/admin/invites")).code); })}>{t("sec_new_invite")}</button>
+          {code && (
+            <div className="notice" style={{ marginTop: 8 }}>
+              <p className="small" style={{ margin: 0 }}>{t("sec_invite_once")}</p>
+              <p><span className="kbd" style={{ fontSize: "1.1em", userSelect: "all" }}>{code}</span></p>
+            </div>
+          )}
+          {invites.map((i) => (
+            <div key={i.id} className="fact">
+              <div className="v">{i.status === "used" ? t("invite_used") : i.status === "expired" ? t("invite_expired") : t("invite_unused")}</div>
+              <div className="why">{new Date(i.created_at).toLocaleString()}{i.created_by ? ` · ${i.created_by}` : ""}
+                {i.status === "unused" && <> · <button className="ghost" onClick={() => run(async () => { await api("DELETE", `/api/admin/invites/${i.id}`); })}>{t("sec_remove")}</button></>}
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+    </section>
   );
 }

@@ -1,0 +1,64 @@
+name: release-windows
+# Builds the one-click Windows app (CineVision-Windows-x64.zip), checks that the unzipped app really starts,
+# serves the interface and accepts a sign-up, then uploads it: always as a workflow artifact, and to the
+# GitHub Release when a tag v* is pushed.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write   # needed only to attach the zip to the release
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults: { run: { shell: pwsh } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13", architecture: x64 }
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: Build CineVision-Windows-x64.zip
+        run: ./scripts/build_windows_portable.ps1 -OutDir dist -BuildFrontend
+      - name: Unzip into a clean folder (with a space in its name, like most user folders)
+        run: |
+          $dest = Join-Path $env:RUNNER_TEMP "unzipped app"
+          Expand-Archive -Path dist\CineVision-Windows-x64.zip -DestinationPath $dest -Force
+          if (-not (Test-Path "$dest\CineVision\CineVision.cmd")) { throw "CineVision.cmd missing from the zip" }
+          if (-not (Test-Path "$dest\CineVision\Start CineVision.vbs")) { throw "Start CineVision.vbs missing from the zip" }
+          if (-not (Test-Path "$dest\CineVision\ffmpeg\bin\ffprobe.exe")) { throw "ffprobe.exe missing from the zip" }
+      - name: Smoke test the unzipped app with no Python, Node or FFmpeg on PATH
+        run: |
+          $app = Join-Path $env:RUNNER_TEMP "unzipped app\CineVision"
+          $env:CINEVISION_HOME = Join-Path $env:RUNNER_TEMP "cv home"
+          $smoke = (Resolve-Path scripts\smoke_server.py).Path
+          $py = (Get-Command python).Source
+          # the app must not depend on anything installed on the machine
+          $env:Path = "$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\Wbem"
+          & $py $smoke --url http://127.0.0.1:8777 --cwd $app --timeout 300 -- cmd.exe /c "CineVision.cmd" --no-browser --port 8777
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          if (-not (Test-Path "$env:CINEVISION_HOME\keys\master_key")) { throw "keys were not created on first run" }
+          Write-Host "Second start (existing data and keys):"
+          & $py $smoke --url http://127.0.0.1:8777 --cwd $app --timeout 300 -- cmd.exe /c "CineVision.cmd" --no-browser --port 8777
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CineVision-Windows-x64
+          path: |
+            dist/CineVision-Windows-x64.zip
+            dist/CineVision-Windows-x64.zip.sha256
+          if-no-files-found: error
+      - name: Attach to the GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          gh release view $tag 2>$null | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title "CineVision Studio $tag" --notes "Windows: download CineVision-Windows-x64.zip, unzip it, double-click CineVision.cmd."
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          }
+          gh release upload $tag dist/CineVision-Windows-x64.zip dist/CineVision-Windows-x64.zip.sha256 --clobber
+          if ($LASTEXITCODE -ne 0) { exit 1 }

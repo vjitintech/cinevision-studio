@@ -7,7 +7,7 @@ automated tests (`backend/tests`, `e2e/run_e2e.py`).
 
 | Area | What you get | Notes / limits |
 |---|---|---|
-| Accounts | Open sign-up with email + password (`CINEVISION_ALLOW_REGISTRATION=false` closes it after the owner), scrypt passwords, sessions, CSRF, lockout, rate limits, TOTP MFA with recovery codes, password change, sign out everywhere | |
+| Accounts | Sign-up modes via `CINEVISION_SIGNUP`: open (email + password, default), owner_only (invite codes), closed; owner + admins; loopback-only by default with a start-up warning and Security-page banner when exposed over plain http, scrypt passwords, sessions, CSRF, lockout, rate limits, TOTP MFA with recovery codes, password change, sign out everywhere | |
 | Projects | Private projects, director's creative controls, rename, delete (with crypto-shredding) | |
 | Upload | Streaming upload with byte cap, extension + magic-byte check, ffprobe allow-list (container, codec, size, duration, frame rate), sandboxed probing | |
 | Storage | AES-256-GCM per-file encryption, encrypted DB columns, Range-capable decrypting media stream, 5-minute session-bound media tokens | |

@@ -34,3 +34,52 @@ jobs:
         run: pip install pip-audit && pip-audit -r backend/requirements.txt
       - name: npm dependency audit
         run: cd frontend && npm install --no-audit --no-fund && npm audit --omit=dev --audit-level=high
+  windows:
+    # The Windows path on a real Windows machine: backend tests, the desktop launcher used by the one-click zip,
+    # scripts\run_local.ps1 and scripts\install_windows.ps1, each started non-interactively and checked over HTTP.
+    runs-on: windows-latest
+    timeout-minutes: 75
+    defaults: { run: { shell: pwsh } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: PowerShell scripts parse (PowerShell 7)
+        run: ./scripts/check_ps_syntax.ps1
+      - name: PowerShell scripts parse (Windows PowerShell 5.1, what most people have)
+        shell: powershell
+        run: ./scripts/check_ps_syntax.ps1
+      - name: Install FFmpeg
+        run: |
+          choco install ffmpeg -y --no-progress
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          ffmpeg -hide_banner -version | Select-Object -First 1
+          ffprobe -hide_banner -version | Select-Object -First 1
+      - run: python -m pip install -r backend/requirements-dev.txt
+      - name: Backend tests on Windows
+        working-directory: backend
+        run: python -m pytest -q
+      - name: Frontend build
+        working-directory: frontend
+        run: |
+          npm install --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          npm run build
+      - name: Smoke test - desktop launcher (the code inside the one-click zip)
+        working-directory: backend
+        run: python ../scripts/smoke_server.py --url http://127.0.0.1:8765 --timeout 300 -- python -m cinevision.launcher --no-browser --port 8765 --home "$env:RUNNER_TEMP\cv-home"
+      - name: Smoke test - scripts\run_local.ps1 (source version; creates its own venv)
+        run: python scripts/smoke_server.py --url http://127.0.0.1:8000 --timeout 1200 -- powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run_local.ps1
+      - name: Smoke test - scripts\install_windows.ps1 (fresh clone, then update; idempotent)
+        env:
+          CINEVISION_DIR: ${{ runner.temp }}\cv-src
+          CINEVISION_REPO_URL: ${{ github.workspace }}
+          CINEVISION_INSTALL_NORUN: "1"
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install_windows.ps1
+          if ($LASTEXITCODE -ne 0) { throw "first run failed" }
+          if (-not (Test-Path "$env:CINEVISION_DIR\scripts\run_local.ps1")) { throw "clone missing" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install_windows.ps1
+          if ($LASTEXITCODE -ne 0) { throw "second run (update) failed" }

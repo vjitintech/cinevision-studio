@@ -35,8 +35,8 @@ def test_app_labels_translated_with_placeholders():
     import json
     from pathlib import Path
     fe = Path(__file__).resolve().parents[2] / "frontend" / "src"
-    en = dict(re.findall(r'(\w+): "((?:[^"\\]|\\.)*)"', (fe / "i18n-strings.ts").read_text()))
-    ui = json.loads((fe / "i18n-ui.json").read_text())
+    en = dict(re.findall(r'(\w+): "((?:[^"\\]|\\.)*)"', (fe / "i18n-strings.ts").read_text(encoding="utf-8")))
+    ui = json.loads((fe / "i18n-ui.json").read_text(encoding="utf-8"))
     assert set(ui) == set(OTHER)
     for lang, d in ui.items():
         assert set(d) == set(en), (lang, set(en) ^ set(d))

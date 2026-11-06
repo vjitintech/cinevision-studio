@@ -11,10 +11,16 @@ if [ ! -f frontend/dist/index.html ] || [ -n "$(find frontend/src frontend/build
 fi
 export CINEVISION_MASTER_KEY_FILE="$PWD/deploy/secrets/master_key"
 export CINEVISION_DATA_DIR="${CINEVISION_DATA_DIR:-$PWD/data}"
-export CINEVISION_PUBLIC_ORIGIN="http://127.0.0.1:8000"
+PORT="${CINEVISION_PORT:-8000}"
+export CINEVISION_PORT="$PORT"
+export CINEVISION_PUBLIC_ORIGIN="http://127.0.0.1:$PORT"
+export CINEVISION_EXTRA_ORIGINS="http://localhost:$PORT"
 export CINEVISION_COOKIE_SECURE=false          # plain http is acceptable only on 127.0.0.1
 export CINEVISION_EMBEDDED_WORKER=true
 export CINEVISION_FRONTEND_DIST="$PWD/frontend/dist"
 cd backend
-echo "CineVision Studio → http://127.0.0.1:8000"
+FACE="$PWD/cinevision/models/face_detection_yunet_2023mar.onnx"
+[ -n "${CINEVISION_FACE_MODEL:-}" ] || [ ! -f "$FACE" ] || export CINEVISION_FACE_MODEL="$FACE"
+# listens on 127.0.0.1 only, unless you set CINEVISION_HOST yourself (the server then prints a warning)
+echo "CineVision Studio → http://127.0.0.1:$PORT"
 exec ../.venv/bin/python -m cinevision.app

@@ -69,7 +69,7 @@ def close_thread_connection() -> None:
 
 
 def init_db() -> None:
-    schema = (Path(__file__).parent / "schema.sql").read_text()
+    schema = (Path(__file__).parent / "schema.sql").read_text(encoding="utf-8")
     c = conn()
     c.executescript(schema)
     row = c.execute("SELECT version FROM schema_version").fetchone()

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { api, ApiError } from "../api";
 import type { Session } from "../App";
 import { ErrorNote, Labeled } from "../components/common";
+import { useT } from "../i18n";
 import { PrevisCanvas } from "../previs/PrevisCanvas";
 import { buildScene, worldLights } from "../previs/render";
 import type { Scene } from "../types";
@@ -17,6 +18,15 @@ export function AuthPage({ session, onDone }: { session: Session; onDone: () => 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
+  const [invite, setInvite] = useState("");
+  const { t } = useT();
+  const signup = session.signup;
+  const needsInvite = mode === "register" && !!signup?.invite_required;
+  const local = email.split("@")[0].toLowerCase();
+  const rules = [
+    { ok: password.length >= 12, text: t("pw_rule_length") },
+    ...(local.length >= 4 ? [{ ok: !password.toLowerCase().includes(local), text: t("pw_rule_email") }] : []),
+  ];
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const faces = useMemo(() => buildScene(DEMO), []);
@@ -30,7 +40,8 @@ export function AuthPage({ session, onDone }: { session: Session; onDone: () => 
     setBusy(true); setError(null);
     try {
       if (session.mfa_required) await api("POST", "/api/auth/mfa/verify", { code });
-      else await api("POST", mode === "login" ? "/api/auth/login" : "/api/auth/register", { email, password });
+      else if (mode === "login") await api("POST", "/api/auth/login", { email, password });
+      else await api("POST", "/api/auth/register", needsInvite ? { email, password, invite } : { email, password });
       onDone();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong.");
@@ -58,12 +69,23 @@ export function AuthPage({ session, onDone }: { session: Session; onDone: () => 
           </>
         ) : (
           <>
-            <h2>{mode === "login" ? "Sign in" : session.registration_open && mode === "register" ? "Create the owner account" : "Sign in"}</h2>
-            {mode === "register" && <p className="muted small">The first account on a private instance becomes its owner. Registration then closes unless the operator reopens it.</p>}
+            <h2>{mode === "login" ? "Sign in" : signup && !signup.first_account ? "Create an account" : "Create the owner account"}</h2>
+            {mode === "register" && (!signup || signup.first_account) && <p className="muted small">{t("auth_first_owner")}</p>}
+            {mode === "login" && signup && !signup.open && <p className="muted small">{t("auth_closed")}</p>}
             <Labeled label="Email"><input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></Labeled>
-            <Labeled label="Password" hint={mode === "register" ? "At least 12 characters. A passphrase works well." : undefined}>
+            <Labeled label="Password">
               <input type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} required value={password} onChange={(e) => setPassword(e.target.value)} />
             </Labeled>
+            {mode === "register" && (
+              <ul className="small" style={{ listStyle: "none", padding: 0, margin: "-4px 0 10px" }} aria-live="polite">
+                {rules.map((r) => <li key={r.text} style={{ color: r.ok ? "var(--ok)" : undefined }}>{r.ok ? "\u2713" : "\u2022"} {r.text}</li>)}
+              </ul>
+            )}
+            {needsInvite && (
+              <Labeled label={t("auth_invite")} hint={t("auth_invite_hint")}>
+                <input autoComplete="off" spellCheck={false} required value={invite} onChange={(e) => setInvite(e.target.value)} placeholder="ABCDE-FGHJK-LMNPQ" />
+              </Labeled>
+            )}
           </>
         )}
         <ErrorNote error={error} />
