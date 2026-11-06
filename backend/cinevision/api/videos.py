@@ -121,7 +121,11 @@ async def upload_video(request: Request):
     ctx = current(request)
     pid = request.path_params["pid"]
     owned_project(ctx, pid)
-    wait = security.limiter.hit(f"upload:{ctx.uid}", 20, 3600)
+    # a movie assembly takes up to 300 clips, so its clips get their own, larger hourly allowance (twice the clip
+    # cap, for retries); single projects keep 20 an hour
+    asm = db.one("SELECT 1 FROM assembly_clips WHERE clip_project_id=?", (pid,)) is not None
+    wait = (security.limiter.hit(f"upload-asm:{ctx.uid}", 600, 3600) if asm
+            else security.limiter.hit(f"upload:{ctx.uid}", 20, 3600))
     if wait:
         raise ApiError(429, "rate_limited", "Too many uploads. Try again later.", {"Retry-After": str(wait)})
     if db.one("SELECT 1 FROM uploaded_videos WHERE project_id=?", (pid,)):

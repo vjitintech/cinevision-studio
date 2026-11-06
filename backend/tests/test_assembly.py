@@ -332,3 +332,28 @@ def test_timeline_export_edl_and_fcpxml_are_frame_accurate():
     assert len(root.findall(".//spine/transition")) == 3                       # fade in, dissolve, fade out
     for a in root.findall("./resources/asset"):
         assert a.find("media-rep").get("kind") == "original-media"
+
+
+def test_assembly_takes_more_than_20_clips_an_hour(tmp_path_factory):
+    """Real rate limits (multiplier 1): single projects keep 20 uploads an hour, but an assembly's clips don't
+    share that budget, otherwise clip 21 of a 300-clip movie is refused (and the page then deletes it)."""
+    from conftest import start_server, stop_server
+    d = tmp_path_factory.mktemp("asm_rate")
+    clip = d / "c.mp4"
+    _ff("-f", "lavfi", "-i", "color=gray:s=320x180:d=1:r=24", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(clip))
+    proc, info = start_server(d, {"CINEVISION_RATE_LIMIT_MULTIPLIER": "1", "CINEVISION_EMBEDDED_WORKER": "false"})
+    try:
+        c = Client(info["port"])
+        assert c.post("/api/auth/register", {"email": "big@example.test", "password": PASSWORD}).status == 201
+        aid = c.post("/api/assemblies", {"title": "Feature"}).json["id"]
+        for i in range(25):
+            cid = c.post(f"/api/assemblies/{aid}/clips", {"filename": f"S{i:03d}.mp4"}).json["clip_id"]
+            r = c.upload(cid, clip, f"S{i:03d}.mp4")
+            assert r.status == 201, (i, r.status, r.json)
+        statuses = []
+        for i in range(21):                                  # single projects: still 20 an hour
+            pid = c.post("/api/projects", {"title": f"P{i}"}).json["id"]
+            statuses.append(c.upload(pid, clip).status)
+        assert statuses[:20] == [201] * 20 and statuses[20] == 429, statuses
+    finally:
+        stop_server(proc)
