@@ -74,6 +74,10 @@ def find_ffmpeg() -> tuple[str | None, str | None]:
 def _port_free(host: str, port: int) -> bool:
     with socket.socket(socket.AF_INET6 if ":" in host else socket.AF_INET) as s:
         try:
+            if os.name != "nt":
+                # Like uvicorn: a port whose old connections are only in TIME_WAIT is free to use.
+                # (On Windows SO_REUSEADDR would allow stealing a live port, so it's not set there.)
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind((host, port))
             return True
         except OSError:
