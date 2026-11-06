@@ -278,3 +278,11 @@ CREATE TABLE IF NOT EXISTS assembly_results (
     ai_enc           TEXT,
     created_at       TEXT NOT NULL
 );
+-- The owner's own clip order for an assembly (drag and drop) with its continuity check. Additive: existing
+-- databases get it on the next start (init_db runs this file; every statement is IF NOT EXISTS).
+CREATE TABLE IF NOT EXISTS assembly_orders (
+    assembly_id      TEXT PRIMARY KEY REFERENCES assemblies(project_id) ON DELETE CASCADE,
+    owner_id         TEXT NOT NULL,
+    data_enc         TEXT NOT NULL,
+    updated_at       TEXT NOT NULL
+);

@@ -67,6 +67,40 @@ def test_mcp_review_list_refine(server):
         m.close()
 
 
+def test_mcp_reorder_movie_and_export_timeline(server, tmp_path):
+    """assemble_movie → reorder_movie (own order + continuity notes) → export_timeline (EDL text)."""
+    import shutil
+    c = Client(server["port"])
+    assert c.post("/api/auth/register", {"email": "cutter@example.test", "password": PASSWORD}).status == 201
+    a, b = tmp_path / "A001_pushin.mp4", tmp_path / "A002_twoshots.mp4"
+    shutil.copy(SAMPLE, a)
+    shutil.copy(BACKEND.parent / "samples" / "sample-two-shots.mp4", b)
+    m = MCP(server["port"], "cutter@example.test")
+    try:
+        m.send("initialize", {"protocolVersion": "2025-06-18"})
+        names = {t["name"] for t in m.send("tools/list")["result"]["tools"]}
+        assert {"export_timeline", "reorder_movie"} <= names
+        r, mv = m.tool("assemble_movie", paths=[str(a), str(b)], title="Two clips")
+        assert not r.get("isError"), mv
+        aid = mv["assembly_id"]
+        r, edl = m.tool("export_timeline", assembly_id=aid)
+        assert not r.get("isError"), edl
+        assert edl["edl"].startswith("TITLE: Two clips") and "* SOURCE FILE: A001_pushin.mp4" in edl["edl"]
+        r, msg = m.tool("export_timeline", assembly_id=aid, order="mine")
+        assert r["isError"] and "own order" in msg
+        r, mine = m.tool("reorder_movie", assembly_id=aid, order=["A002_twoshots.mp4", "A001_pushin.mp4", "A002_twoshots.mp4"])
+        assert not r.get("isError"), mine
+        assert [o["clip"] for o in mine["order"]] == ["A002_twoshots.mp4", "A001_pushin.mp4", "A002_twoshots.mp4"]
+        assert any("twice" in n["problem"] and n["fix"] for n in mine["notes"])
+        r, edl = m.tool("export_timeline", assembly_id=aid, order="mine")
+        body = edl["edl"]
+        assert body.index("A002_twoshots.mp4") < body.index("A001_pushin.mp4") and body.count("* SOURCE FILE:") == 3
+        r, msg = m.tool("reorder_movie", assembly_id=aid, order=["nope.mp4"])
+        assert r["isError"] and "nope.mp4" in msg
+    finally:
+        m.close()
+
+
 def test_mcp_wrong_password_is_a_clear_error(server):
     m = MCP(server["port"], "nobody@example.test")
     try:

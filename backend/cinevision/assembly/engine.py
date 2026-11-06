@@ -14,6 +14,8 @@ from __future__ import annotations
 import math
 import re
 
+from . import lexicon
+
 SIZE_RANK = {"extreme wide": 0, "wide or establishing": 0, "wide": 1, "full / medium-wide": 2,
              "medium / cowboy (body larger than frame)": 3, "medium": 3, "medium close-up": 4, "close-up": 5,
              "close / insert (large single subject)": 5, "extreme close-up": 6}
@@ -40,6 +42,15 @@ CUES = {
     "credits": r"\b(end credits|credits|the end|closing)\b",
 }
 _CUE_RX = {k: re.compile(v, re.I) for k, v in CUES.items()}
+
+
+def detect_cues(text: str) -> list[str]:
+    """English cue regexes plus the multi-language lexicon (Hindi, Telugu, … Japanese, Chinese), no AI needed."""
+    found = {k for k, rx in _CUE_RX.items() if rx.search(text)}
+    return sorted(found | lexicon.match(text))
+
+
+SENTENCE_END = re.compile(r"(?<=[.!?।॥؟])\s+|(?<=[。！？])\s*")
 SLUG = re.compile(r"^\s*(\d+\.?\s*)?(INT\.|EXT\.|INT/EXT|I/E)", re.I)
 
 
@@ -65,11 +76,11 @@ def split_beats(script: str | None) -> list[dict]:
     else:                                              # prose: one beat per line, or per sentence for one paragraph
         parts = [l.strip() for l in lines if l.strip()]
         if len(parts) <= 2:
-            parts = [s.strip() for s in re.split(r"(?<=[.!?।])\s+", " ".join(parts)) if s.strip()]
+            parts = [s.strip() for s in SENTENCE_END.split(" ".join(parts)) if s and s.strip()]
         beats = parts
     out = []
     for i, text in enumerate(beats[:80]):
-        cues = sorted(k for k, rx in _CUE_RX.items() if rx.search(text))
+        cues = detect_cues(text)
         out.append({"index": i, "text": text[:400], "cues": cues})
     return out
 
@@ -210,7 +221,55 @@ def _assign_cards(feats: list[dict]) -> None:
             f["credits"] = True
 
 
-def assemble(clips: list[dict], script: str | None) -> dict:
+def _build_sequence(used: list[dict], beats: list[dict], flags: dict[str, list[dict]]) -> tuple[list[dict], float]:
+    """Trims, transitions and reasons for clips in playing order. used: [{f, beat, score, agree, scene?, reasons?}]"""
+    sequence = []
+    t = 0.0
+    for i, p in enumerate(used):
+        f = p["f"]
+        reasons = []
+        if f["titles"]:
+            reasons.append({"code": "titles_first", "params": {}})
+        elif f["credits"]:
+            reasons.append({"code": "credits_last", "params": {}})
+        elif p["beat"] is not None:
+            reasons.append({"code": "beat_match", "params": {"beat": p["beat"] + 1, "cues": ", ".join(p["agree"])}})
+        elif beats:
+            reasons.append({"code": "no_beat_kept", "params": {}})
+        else:
+            reasons.append({"code": "scene_group", "params": {"scene": p.get("scene", 0) + 1}})
+        if p.get("reasons") is not None:          # the user's own order explains placements its own way
+            reasons = list(p["reasons"])
+        prev = used[i - 1]["f"] if i else None
+        if prev and prev["setting"][:5] == f["setting"][:5] and prev["time"] == f["time"] and f["size_rank"] > prev["size_rank"]:
+            reasons.append({"code": "size_progression", "params": {}})
+        # transition into this clip
+        if prev is None:
+            transition = "fade_in"
+        elif prev["time"] != f["time"] or prev["setting"][:5] != f["setting"][:5]:
+            transition = "dissolve" if prev["time"] != f["time"] else "cut_new_scene"
+        elif abs(prev["subject_x"] - f["subject_x"]) < 0.08 and abs(prev["size_rank"] - f["size_rank"]) >= 1:
+            transition = "match_cut"
+        else:
+            transition = "cut"
+        if f["dialogue"] and prev is not None:
+            transition_extra = "jcut"
+        else:
+            transition_extra = None
+        head = 0.25 if f["duration"] > 2.5 else 0.0
+        tail = 0.25 if f["duration"] > 2.5 else 0.0
+        length = max(0.0, f["duration"] - head - tail)
+        sequence.append({"position": i + 1, "clip_id": f["id"], "name": f["name"], "beat": p["beat"],
+                         "in_s": round(head, 2), "out_s": round(f["duration"] - tail, 2), "length_s": round(length, 2),
+                         "starts_at_s": round(t, 2), "transition": transition, "transition_extra": transition_extra,
+                         "reasons": reasons, "flags": flags[f["id"]], "score": p["score"], "tags": _tags(f)})
+        t += length
+    if sequence:
+        sequence[-1]["transition_out"] = "fade_out"
+    return sequence, t
+
+
+def assemble(clips: list[dict], script: str | None, _out: dict | None = None) -> dict:
     feats = [clip_features(c) for c in clips]
     _assign_cards(feats)
     beats = split_beats(script)
@@ -304,48 +363,7 @@ def assemble(clips: list[dict], script: str | None) -> dict:
         else:
             used.append(p)
 
-    sequence = []
-    t = 0.0
-    for i, p in enumerate(used):
-        f = p["f"]
-        reasons = []
-        if f["titles"]:
-            reasons.append({"code": "titles_first", "params": {}})
-        elif f["credits"]:
-            reasons.append({"code": "credits_last", "params": {}})
-        elif p["beat"] is not None:
-            reasons.append({"code": "beat_match", "params": {"beat": p["beat"] + 1, "cues": ", ".join(p["agree"])}})
-        elif beats:
-            reasons.append({"code": "no_beat_kept", "params": {}})
-        else:
-            reasons.append({"code": "scene_group", "params": {"scene": p.get("scene", 0) + 1}})
-        prev = used[i - 1]["f"] if i else None
-        if prev and prev["setting"][:5] == f["setting"][:5] and prev["time"] == f["time"] and f["size_rank"] > prev["size_rank"]:
-            reasons.append({"code": "size_progression", "params": {}})
-        # transition into this clip
-        if prev is None:
-            transition = "fade_in"
-        elif prev["time"] != f["time"] or prev["setting"][:5] != f["setting"][:5]:
-            transition = "dissolve" if prev["time"] != f["time"] else "cut_new_scene"
-        elif abs(prev["subject_x"] - f["subject_x"]) < 0.08 and abs(prev["size_rank"] - f["size_rank"]) >= 1:
-            transition = "match_cut"
-        else:
-            transition = "cut"
-        if f["dialogue"] and prev is not None:
-            transition_extra = "jcut"
-        else:
-            transition_extra = None
-        head = 0.25 if f["duration"] > 2.5 else 0.0
-        tail = 0.25 if f["duration"] > 2.5 else 0.0
-        length = max(0.0, f["duration"] - head - tail)
-        sequence.append({"position": i + 1, "clip_id": f["id"], "name": f["name"], "beat": p["beat"],
-                         "in_s": round(head, 2), "out_s": round(f["duration"] - tail, 2), "length_s": round(length, 2),
-                         "starts_at_s": round(t, 2), "transition": transition, "transition_extra": transition_extra,
-                         "reasons": reasons, "flags": flags[f["id"]], "score": p["score"], "tags": _tags(f)})
-        t += length
-    if sequence:
-        sequence[-1]["transition_out"] = "fade_out"
-
+    sequence, t = _build_sequence(used, beats, flags)
     uncovered = [b["index"] + 1 for b in beats if b["cues"] and not any(s["beat"] == b["index"] for s in sequence)]
     notes = []
     if uncovered:
@@ -354,5 +372,159 @@ def assemble(clips: list[dict], script: str | None) -> dict:
         notes.append({"code": "script_no_cues", "params": {}})
     if not beats:
         notes.append({"code": "no_script", "params": {}})
+    if _out is not None:                      # internals for check_order (not stored)
+        _out.update(feats=feats, beats=beats, flags=flags, dup_of=dup_of, placed=placed)
     return {"version": 1, "beats": beats, "sequence": sequence, "rejected": rejected, "notes": notes,
             "runtime_s": round(t, 2), "clip_count": len(feats)}
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# The user's own order: build the same kind of sequence (trims, transitions) and check it for continuity problems.
+MISFIT_CODES = {"no_match", "duplicate", "look_aspect", "look_fps", "look_resolution", "too_short"}
+
+
+def _confident(f: dict, where: str) -> bool:
+    return f["setting"].startswith(where) and f.get("setting_conf", 1) >= (0.55 if where == "indoor" else 0.5)
+
+
+def _jumps(a: dict, b: dict) -> list[str]:
+    out = []
+    if {a["time"], b["time"]} == {"day", "night"}:
+        out.append("time")
+    if (_confident(a, "indoor") and _confident(b, "outdoor")) or (_confident(a, "outdoor") and _confident(b, "indoor")):
+        out.append("place")
+    return out
+
+
+def check_order(clips: list[dict], script: str | None, order: list[str], excluded: list[str]) -> dict:
+    """Continuity notes for an order the user arranged by hand. Every note: {code, params, fix: {code, params},
+    positions (1-based), clip_ids, severity}. Codes are translated by director.render like the other assembly texts.
+    Also returns the sequence (trims, transitions) for that order, used by the timeline export."""
+    ins: dict = {}
+    assemble(clips, script, ins)
+    feats, beats, flags, dup_of = ins["feats"], ins["beats"], ins["flags"], ins["dup_of"]
+    by_id = {f["id"]: f for f in feats}
+    placed = {p["f"]["id"]: p for p in ins["placed"]}
+    order = [c for c in order if c in by_id]
+    excluded = [c for c in dict.fromkeys(excluded) if c in by_id and c not in order]
+    notes: list[dict] = []
+
+    def add(code, positions, ids, params, fix=None, fix_params=None, severity="warn", because=None):
+        n = {"code": code, "params": params, "fix": {"code": fix, "params": fix_params or {}} if fix else None,
+             "positions": positions, "clip_ids": ids, "severity": severity}
+        if because:
+            n["because"] = because
+        notes.append(n)
+
+    def cards(f):
+        return f["titles"] or f["credits"]
+
+    used = []
+    for cid in order:
+        p, f = placed[cid], by_id[cid]
+        if p["beat"] is not None:
+            why = [{"code": "beat_match", "params": {"beat": p["beat"] + 1, "cues": ", ".join(p["agree"])}}]
+        else:
+            why = [{"code": "is_titles" if f["titles"] else "is_credits" if f["credits"] else "user_placed", "params": {}}]
+        used.append({"f": f, "beat": p["beat"], "score": p["score"], "agree": p["agree"], "scene": p.get("scene"), "reasons": why})
+    sequence, runtime = _build_sequence(used, beats, flags)
+
+    if not order:
+        add("chk_empty", [], [], {}, "fix_empty")
+
+    def same_scene(pa, pb) -> bool:
+        if beats:
+            return pa["beat"] is not None and pa["beat"] == pb["beat"]
+        return pa.get("scene") is not None and pa.get("scene") == pb.get("scene")
+
+    seen: dict[str, int] = {}
+    for i, cid in enumerate(order):
+        f, pos = by_id[cid], i + 1
+        if cid in seen:
+            add("chk_repeat", [seen[cid], pos], [cid], {"clip": f["name"], "first": seen[cid], "pos": pos}, "fix_repeat", {"clip": f["name"]})
+            continue
+        seen[cid] = pos
+        misfit = next((fl for fl in flags[cid] if fl["code"] in MISFIT_CODES), None)
+        if misfit:
+            add("chk_misfit_used", [pos], [cid], {"clip": f["name"], "pos": pos}, "fix_misfit_used", {"clip": f["name"]},
+                severity="info", because=misfit)
+        if not i:
+            continue
+        a = by_id[order[i - 1]]
+        if a["id"] == cid:
+            continue
+        pair = {"a": a["name"], "b": f["name"], "pos_a": pos - 1, "pos_b": pos}
+        if a["aspect"] and f["aspect"] and abs(a["aspect"] - f["aspect"]) / max(a["aspect"], f["aspect"]) > 0.03:
+            add("chk_aspect", [pos - 1, pos], [a["id"], cid],
+                {**pair, "aspect_a": round(a["aspect"], 2), "aspect_b": round(f["aspect"], 2)}, "fix_aspect")
+        ra, rb = round(a["fps"] or 0), round(f["fps"] or 0)
+        if ra and rb and abs(ra - rb) >= 2 and max(ra, rb) % min(ra, rb):
+            add("chk_fps", [pos - 1, pos], [a["id"], cid], {**pair, "fps_a": round(a["fps"], 2), "fps_b": round(f["fps"], 2)}, "fix_fps")
+        if cards(a) or cards(f) or not same_scene(placed[a["id"]], placed[cid]):
+            continue
+        scene = (placed[cid]["beat"] + 1) if beats else (placed[cid].get("scene", 0) + 1)
+        j = _jumps(a, f)
+        if "time" in j:
+            add("chk_time_jump", [pos - 1, pos], [a["id"], cid], {**pair, "time_a": a["time"], "time_b": f["time"], "scene": scene},
+                "fix_time_jump")
+        if "place" in j:
+            add("chk_place_jump", [pos - 1, pos], [a["id"], cid], {**pair, "scene": scene}, "fix_place_jump")
+        if not j and _look_distance(a, f) > 0.6:
+            add("chk_look_jump", [pos - 1, pos], [a["id"], cid], {**pair, "scene": scene}, "fix_look_jump")
+
+    # one shot of another time or place between two that match each other (works without a description too)
+    for i in range(1, len(order) - 1):
+        a, b, c = (by_id[order[k]] for k in (i - 1, i, i + 1))
+        if any(cards(x) for x in (a, b, c)) or len({a["id"], b["id"], c["id"]}) < 3:
+            continue
+        if beats and same_scene(placed[a["id"]], placed[b["id"]]):
+            continue                                  # already reported as a jump inside the scene
+        if a["setting"][:5] == c["setting"][:5] and a["time"] == c["time"] and _look_distance(a, c) < 0.35 and _jumps(a, b):
+            add("chk_sandwich", [i, i + 1, i + 2], [a["id"], b["id"], c["id"]],
+                {"a": a["name"], "b": b["name"], "c": c["name"], "pos_b": i + 1}, "fix_sandwich", {"b": b["name"]})
+
+    # two takes of the same shot both used
+    uniq = list(dict.fromkeys(order))
+    for cid in uniq:
+        other = dup_of.get(cid)
+        if other and other in seen:
+            add("chk_dup_take", sorted([seen[other], seen[cid]]), [other, cid],
+                {"clip": by_id[cid]["name"], "other": by_id[other]["name"]}, "fix_dup_take", {"clip": by_id[cid]["name"]})
+
+    # story order: a clip that belongs to an earlier part of the description than one before it
+    if beats:
+        best = None
+        inversions = 0
+        for cid in uniq:
+            b = placed[cid]["beat"]
+            if b is None or cards(by_id[cid]):
+                continue
+            if best is not None and b < best[0]:
+                if inversions < 10:
+                    add("chk_beat_order", [seen[best[1]], seen[cid]], [best[1], cid],
+                        {"clip": by_id[cid]["name"], "beat": b + 1, "prev": by_id[best[1]]["name"], "prev_beat": best[0] + 1},
+                        "fix_beat_order", {"clip": by_id[cid]["name"], "prev": by_id[best[1]]["name"]})
+                inversions += 1
+            elif best is None or b > best[0]:
+                best = (b, cid)
+        covered_before = {p["beat"] for c, p in placed.items() if p["beat"] is not None
+                          and not any(fl["code"] in MISFIT_CODES for fl in flags[c])}
+        covered_now = {placed[c]["beat"] for c in uniq if placed[c]["beat"] is not None}
+        lost = sorted(b + 1 for b in covered_before - covered_now)
+        if lost and order:
+            add("chk_beat_missing", [], [], {"beats": ", ".join(map(str, lost[:20]))}, "fix_beat_missing", severity="info")
+
+    # titles first, credits last
+    for i, cid in enumerate(uniq):
+        f = by_id[cid]
+        if f["titles"] and any(not by_id[x]["titles"] for x in uniq[:i]):
+            add("chk_titles_not_first", [seen[cid]], [cid], {"clip": f["name"], "pos": seen[cid]}, "fix_titles_first", {"clip": f["name"]})
+        if f["credits"] and any(not by_id[x]["credits"] for x in uniq[i + 1:]):
+            add("chk_credits_not_last", [seen[cid]], [cid], {"clip": f["name"], "pos": seen[cid]}, "fix_credits_last", {"clip": f["name"]})
+
+    if not notes:
+        add("chk_ok", [], [], {"n": len(order)}, severity="ok")
+    notes.sort(key=lambda n: min(n["positions"]) if n["positions"] else 10 ** 6)
+    return {"version": 1, "order": order, "excluded": excluded,
+            "unplaced": [f["id"] for f in feats if f["id"] not in seen and f["id"] not in excluded],
+            "sequence": sequence, "runtime_s": round(runtime, 2), "notes": notes}

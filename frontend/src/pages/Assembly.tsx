@@ -4,6 +4,7 @@ import { linkTo, navigate } from "../router";
 import { ErrorNote, Labeled, usePoll } from "../components/common";
 import { useT } from "../i18n";
 import { fmtTime } from "../previs/math";
+import { MyOrder } from "./AssemblyOrder";
 
 const EXAMPLE = `Opening titles.
 EXT. VILLAGE ROAD - DAY. Ravi rides his bicycle past the fields, smiling.
@@ -40,13 +41,14 @@ export function NewAssembly() {
   );
 }
 
+interface QueueItem { id: string; name: string; progress: number; state: "waiting" | "uploading" | "retrying" | "done" | "failed"; error?: string }
 interface Clip { clip_id: string; name: string | null; status: string; thumb: string | null; meta: any; job: any }
 
 export function AssemblyPage({ aid }: { aid: string }) {
   const { t, lang } = useT();
   const [a, setA] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [queue, setQueue] = useState<{ name: string; progress: number; error?: string }[]>([]);
+  const [queue, setQueue] = useState<QueueItem[]>([]);
   const [script, setScript] = useState<string | null>(null);
   const [over, setOver] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -58,21 +60,40 @@ export function AssemblyPage({ aid }: { aid: string }) {
   useEffect(() => { load(); }, [load]);
   const busyClips = a?.clips.some((c: Clip) => c.status !== "analysed" && c.status !== "failed" && c.job?.status !== "failed");
   const busyJob = a?.jobs.some((j: any) => j.status === "queued" || j.status === "processing");
-  usePoll(load, !!a && (busyClips || busyJob || queue.some((q) => q.progress < 1 && !q.error)), 2500);
+  usePoll(load, !!a && (busyClips || busyJob || queue.some((q) => q.state !== "done" && q.state !== "failed")), 2500);
 
   const addFiles = async (files: File[]) => {
-    const items = files.filter((f) => /\.(mp4|mov|m4v|mkv|webm|avi)$/i.test(f.name));
-    setQueue((q) => [...q, ...items.map((f) => ({ name: f.name, progress: 0 }))]);
-    for (const f of items) {      // one at a time keeps memory and bandwidth low, even for 100 clips
-      try {
-        const c = await api("POST", `/api/assemblies/${aid}/clips`, { filename: f.name });
-        await uploadClip(c.clip_id, f, (p) => setQueue((q) => q.map((x) => (x.name === f.name ? { ...x, progress: p } : x))));
-        setQueue((q) => q.map((x) => (x.name === f.name ? { ...x, progress: 1 } : x)));
-      } catch (e) {
-        setQueue((q) => q.map((x) => (x.name === f.name ? { ...x, error: e instanceof ApiError ? e.message : "Upload failed." } : x)));
+    const items = files.filter((f) => /\.(mp4|mov|m4v|mkv|webm|avi)$/i.test(f.name))
+      .map((f) => ({ f, id: `${Date.now()}-${Math.random().toString(36).slice(2)}` }));
+    if (!items.length) return;
+    setQueue((q) => [...q, ...items.map(({ f, id }) => ({ id, name: f.name, progress: 0, state: "waiting" as const }))]);
+    const patch = (id: string, p: Partial<QueueItem>) => setQueue((q) => q.map((x) => (x.id === id ? { ...x, ...p } : x)));
+    // 3 uploads at a time: much faster for big batches, still gentle on memory; a failed file is retried once,
+    // and one bad file never stops the rest
+    const one = async ({ f, id }: { f: File; id: string }) => {
+      let clipId: string | null = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          patch(id, { state: attempt ? "retrying" : "uploading", progress: 0, error: undefined });
+          if (!clipId) clipId = (await api("POST", `/api/assemblies/${aid}/clips`, { filename: f.name })).clip_id;
+          await uploadClip(clipId!, f, (p) => patch(id, { progress: p }));
+          patch(id, { state: "done", progress: 1 });
+          return;
+        } catch (e) {
+          const msg = e instanceof ApiError ? e.message : "Upload failed.";
+          const final = attempt === 1 || (e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429);
+          if (final) {
+            patch(id, { state: "failed", error: msg });
+            if (clipId && !(e instanceof ApiError && e.status === 409)) api("DELETE", `/api/assemblies/${aid}/clips/${clipId}`).catch(() => undefined);
+            return;
+          }
+        }
       }
-      load();
-    }
+    };
+    let next = 0;
+    const lane = async () => { while (next < items.length) { const it = items[next++]; await one(it); load(); } };
+    await Promise.all([lane(), lane(), lane()]);
+    load();
   };
   const saveScript = async () => { await api("PATCH", `/api/assemblies/${aid}`, { script: script || "" }); await order(); };
   const order = async () => { try { await api("POST", `/api/assemblies/${aid}/assemble`, { lang }); await load(); } catch (e) { setError(e instanceof ApiError ? e.message : "Failed."); } };
@@ -98,13 +119,25 @@ export function AssemblyPage({ aid }: { aid: string }) {
       <div className={`dropzone ${over ? "over" : ""}`} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
         onDrop={(e) => { e.preventDefault(); setOver(false); addFiles(Array.from(e.dataTransfer.files)); }}>
         <p><strong>{t("asm_drop")}</strong> · <button type="button" onClick={() => input.current?.click()}>{t("choose_file")}</button></p>
-        <p className="small muted">{t("asm_drop_hint", { n: a.max_clips })}</p>
+        <p className="small muted">{t("asm_drop_hint3", { n: a.max_clips })}</p>
         <input ref={input} type="file" hidden multiple accept=".mp4,.mov,.m4v,.mkv,.webm,.avi,video/*" onChange={(e) => addFiles(Array.from(e.target.files || []))} />
       </div>
-      {queue.filter((q) => q.progress < 1 || q.error).map((q) => (
-        <div key={q.name} className="small row"><span className="grow">{q.name}</span>
-          {q.error ? <span style={{ color: "var(--danger)" }}>{q.error}</span> : <span>{Math.round(q.progress * 100)}%</span>}</div>
-      ))}
+      {queue.length > 0 && (
+        <div className="upload-queue">
+          <p className="small" role="status" aria-live="polite">{t("asm_upload_counts", {
+            done: queue.filter((q) => q.state === "done").length, n: queue.length,
+            active: queue.filter((q) => q.state === "uploading" || q.state === "retrying").length,
+            failed: queue.filter((q) => q.state === "failed").length })}</p>
+          <ul className="small">
+            {queue.filter((q) => q.state !== "done").map((q) => (
+              <li key={q.id} className="row"><span className="grow">{q.name}</span>
+                {q.state === "failed" ? <span style={{ color: "var(--danger)" }}>{q.error}</span>
+                  : <><progress max={1} value={q.progress} aria-label={q.name} />
+                    <span>{q.state === "retrying" ? t("asm_retrying") : q.state === "waiting" ? "…" : `${Math.round(q.progress * 100)}%`}</span></>}
+              </li>))}
+          </ul>
+        </div>
+      )}
 
       <h2>{t("asm_clips", { n: a.clips.length, done: analysed })}</h2>
       <div className="clip-grid">
@@ -158,6 +191,7 @@ export function AssemblyPage({ aid }: { aid: string }) {
                 </li>))}</ul>
             </>
           )}
+          <MyOrder aid={aid} a={a} r={r} onSaved={load} />
           {a.ai?.status === "used" && (
             <section className="concept ai-notes">
               <h3 style={{ marginTop: 0 }}>{t("asm_ai_order")} <span className="small faint">{a.ai.model}</span></h3>

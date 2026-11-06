@@ -16,6 +16,8 @@ It uses only the Python standard library and talks over stdio, the same way coli
 | `list_concepts` | The alternative cinematography concepts of a project, shot by shot |
 | `refine_concept` | "Make the lighting more dramatic", "shot 2 tighter"… — creates a new revision |
 | `assemble_movie` | Uploads many clips + an optional story; returns the story order with reasons, trims, transitions and the clips that don't fit |
+| `reorder_movie` | Sets your own clip order (file names or clip ids) and returns continuity notes, each with what to do |
+| `export_timeline` | The suggested cut or your own order as a CMX3600 EDL (text) for DaVinci Resolve, Premiere Pro, Avid, Final Cut |
 
 ## Privacy
 

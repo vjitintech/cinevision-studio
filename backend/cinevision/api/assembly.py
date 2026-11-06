@@ -2,16 +2,20 @@
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.routing import Route
 
-from .. import db, jobs, retention
+from .. import audit, db, exports, jobs, retention
+from ..assembly import engine as AE
+from ..assembly import timeline as TL
 from ..director import render as RD
 from ..director.i18n import LANGUAGES
 from ..keys import keyring
 from ..pipeline import stages
 from ..web import ApiError, current, not_found, ok, parse
+from .exports import _attachment
 from .projects import CreativeControls
 from .videos import MEDIA_TOKEN_TTL, _token_for
 
@@ -33,6 +37,12 @@ class ClipCreate(BaseModel):
 
 
 class AssembleBody(BaseModel):
+    lang: str | None = Field(default=None, max_length=8)
+
+
+class OrderBody(BaseModel):
+    clips: list[str] = Field(max_length=2 * MAX_CLIPS)        # playing order; a clip may appear twice on purpose
+    excluded: list[str] = Field(default_factory=list, max_length=MAX_CLIPS)
     lang: str | None = Field(default=None, max_length=8)
 
 
@@ -87,7 +97,9 @@ async def get(request: Request):
         ai = ai_all.get(lang)
     jobs_ = [jobs.public(dict(j)) for j in db.all_("SELECT * FROM render_jobs WHERE project_id=? ORDER BY created_at DESC LIMIT 5", (aid,))]
     from ..adapters import localai
-    return ok({"id": aid, "title": k.dec(proj["title_enc"], f"projects:title:{aid}"),
+    mine = _stored_order(aid)
+    mine = _render_order(aid, mine, lang, res["created_at"] if res else None) if mine else None
+    return ok({"id": aid, "title": k.dec(proj["title_enc"], f"projects:title:{aid}"), "mine": mine,
                "script": k.dec(a["script_enc"], f"assemblies:script:{aid}") if a["script_enc"] else "",
                "clips": clips, "result": result, "ai": ai, "ai_available": localai.available(ctx.uid),
                "jobs": jobs_, "expires_in": MEDIA_TOKEN_TTL, "max_clips": MAX_CLIPS})
@@ -159,6 +171,147 @@ async def delete(request: Request):
     return Response(status_code=204)
 
 
+def _clip_ids(aid: str) -> list[str]:
+    return [r["clip_project_id"] for r in db.all_(
+        "SELECT c.clip_project_id FROM assembly_clips c JOIN projects p ON p.id=c.clip_project_id"
+        " WHERE c.assembly_id=? AND p.status='active' ORDER BY c.created_at, c.rowid", (aid,))]
+
+
+def _load_clips(aid: str) -> list[dict]:
+    """The analysed clips of an assembly, in the shape the engine reads (same as the assemble job)."""
+    from ..concepts import assessment as AS
+    k = keyring()
+    clips = []
+    for pid in _clip_ids(aid):
+        an = db.one("SELECT * FROM scene_analyses WHERE project_id=?", (pid,))
+        v = db.one("SELECT * FROM uploaded_videos WHERE project_id=?", (pid,))
+        if an is None or v is None:
+            continue
+        analysis = k.dec_json(an["data_enc"], f"scene_analyses:data:{an['id']}")
+        meta = dict(db.one("SELECT * FROM video_metadata WHERE video_id=?", (v["id"],)) or {})
+        clips.append({"id": pid, "name": k.dec(v["filename_enc"], f"uploaded_videos:filename:{v['id']}"), "analysis": analysis,
+                      "meta": meta, "issues": AS.technical_checks(analysis, {})})
+    return clips
+
+
+def _media_facts(aid: str) -> dict[str, dict]:
+    """Original file name, frame rate, size, length and audio of every clip — what an editor's timeline needs."""
+    k = keyring()
+    out = {}
+    for pid in _clip_ids(aid):
+        v = db.one("SELECT id, filename_enc FROM uploaded_videos WHERE project_id=?", (pid,))
+        if v is None:
+            continue
+        m = db.one("SELECT fps, width, height, duration_s, audio_codec FROM video_metadata WHERE video_id=?", (v["id"],))
+        if m is None:
+            continue
+        out[pid] = {"name": k.dec(v["filename_enc"], f"uploaded_videos:filename:{v['id']}"), "fps": m["fps"], "width": m["width"],
+                    "height": m["height"], "duration_s": m["duration_s"], "audio": bool(m["audio_codec"])}
+    return out
+
+
+def _stored_order(aid: str) -> dict | None:
+    row = db.one("SELECT * FROM assembly_orders WHERE assembly_id=?", (aid,))
+    if row is None:
+        return None
+    data = keyring().dec_json(row["data_enc"], f"assembly_orders:data:{aid}")
+    data["updated_at"] = row["updated_at"]
+    return data
+
+
+def _render_order(aid: str, data: dict, lang: str, result_created: str | None) -> dict:
+    current = set(_clip_ids(aid))
+    out = RD.render_assembly_order(data, lang)
+    out["clips"] = [c for c in data["order"] if c in current]
+    out["excluded"] = [c for c in data["excluded"] if c in current]
+    out["unplaced"] = [c for c in _clip_ids(aid) if c not in set(out["clips"]) | set(out["excluded"])]
+    out["updated_at"] = data.get("updated_at")
+    out["stale"] = bool(result_created and data.get("based_on") and result_created > data["based_on"])
+    return out
+
+
+def _check_and_store(ctx, aid: str, order: list[str], excluded: list[str]) -> dict:
+    a = db.one("SELECT script_enc FROM assemblies WHERE project_id=?", (aid,))
+    k = keyring()
+    script = k.dec(a["script_enc"], f"assemblies:script:{aid}") if a and a["script_enc"] else ""
+    res = db.one("SELECT created_at FROM assembly_results WHERE assembly_id=?", (aid,))
+    data = AE.check_order(_load_clips(aid), script, order, excluded)
+    data["based_on"] = res["created_at"] if res else None
+    now = db.now_iso()
+    with db.tx() as c:
+        c.execute("DELETE FROM assembly_orders WHERE assembly_id=?", (aid,))
+        c.execute("INSERT INTO assembly_orders(assembly_id,owner_id,data_enc,updated_at) VALUES (?,?,?,?)",
+                  (aid, ctx.uid, k.enc_json(data, f"assembly_orders:data:{aid}"), now))
+    data["updated_at"] = now
+    return data
+
+
+async def put_order(request: Request):
+    """Save the owner's own order (and which clips are left out) and check it for continuity problems."""
+    ctx = current(request)
+    aid = request.path_params["aid"]
+    _owned(ctx, aid)
+    body = await parse(request, OrderBody)
+    if not db.one("SELECT 1 FROM assembly_results WHERE assembly_id=?", (aid,)):
+        raise ApiError(409, "not_ordered", "Order the movie once first; then you can rearrange it.")
+    ids = set(_clip_ids(aid))
+    if any(c not in ids for c in body.clips) or any(c not in ids for c in body.excluded):
+        raise ApiError(400, "unknown_clip", "One of the clips is not part of this movie.")
+    if set(body.clips) & set(body.excluded):
+        raise ApiError(400, "clip_twice", "A clip can't be both used and not used.")
+    lang = body.lang if body.lang in LANGUAGES else stages.user_language(ctx.uid)
+    data = await run_in_threadpool(_check_and_store, ctx, aid, body.clips, body.excluded)
+    res = db.one("SELECT created_at FROM assembly_results WHERE assembly_id=?", (aid,))
+    audit.record("assembly.order", user_id=ctx.uid, target_type="project", target_id=aid, ip=ctx.ip,
+                 details={"count": len(body.clips)})
+    return ok({"mine": _render_order(aid, data, lang, res["created_at"] if res else None)})
+
+
+async def delete_order(request: Request):
+    """Back to the suggested cut."""
+    ctx = current(request)
+    aid = request.path_params["aid"]
+    _owned(ctx, aid)
+    db.run("DELETE FROM assembly_orders WHERE assembly_id=?", (aid,))
+    return Response(status_code=204)
+
+
+async def export_timeline(request: Request):
+    """Download the suggested cut or the owner's own order as CMX3600 EDL or FCPXML 1.9 (names and numbers only)."""
+    ctx = current(request)
+    aid = request.path_params["aid"]
+    proj = _owned(ctx, aid)
+    fmt = request.query_params.get("format", "edl")
+    which = request.query_params.get("order", "suggested")
+    if fmt not in ("edl", "fcpxml") or which not in ("suggested", "mine"):
+        raise ApiError(400, "bad_request", "format must be edl or fcpxml; order must be suggested or mine.")
+    k = keyring()
+    if which == "mine":
+        data = _stored_order(aid)
+        if data is None:
+            raise ApiError(409, "no_order", "Save your own order first (Check my order).")
+    else:
+        res = db.one("SELECT data_enc FROM assembly_results WHERE assembly_id=?", (aid,))
+        if res is None:
+            raise ApiError(409, "not_ordered", "Order the movie first.")
+        data = k.dec_json(res["data_enc"], f"assembly_results:data:{aid}")
+    facts = _media_facts(aid)
+    entries = [{**facts[s["clip_id"]], "in_s": s["in_s"], "out_s": s["out_s"], "transition": s["transition"],
+                "transition_out": s.get("transition_out")} for s in data["sequence"] if s["clip_id"] in facts]
+    if not entries:
+        raise ApiError(409, "empty_cut", "There are no clips in this cut to export.")
+    title = k.dec(proj["title_enc"], f"projects:title:{aid}")
+    tl = TL.build(entries, title)
+    name = exports.safe_filename(f"{title}-{'my-order' if which == 'mine' else 'suggested-cut'}", fmt)
+    if fmt == "edl":
+        resp = _attachment(TL.to_edl(tl).encode("utf-8"), "text/plain; charset=utf-8", name)
+    else:
+        resp = _attachment(TL.to_fcpxml(tl).encode("utf-8"), "application/xml; charset=utf-8", name)
+    audit.record("export.timeline", user_id=ctx.uid, target_type="project", target_id=aid, ip=ctx.ip,
+                 details={"format": fmt, "kind": which, "count": len(entries)})
+    return resp
+
+
 routes = [
     Route("/api/assemblies", create, methods=["POST"]),
     Route("/api/assemblies/{aid}", get, methods=["GET"]),
@@ -167,4 +320,7 @@ routes = [
     Route("/api/assemblies/{aid}/clips", add_clip, methods=["POST"]),
     Route("/api/assemblies/{aid}/clips/{cid}", remove_clip, methods=["DELETE"]),
     Route("/api/assemblies/{aid}/assemble", run, methods=["POST"]),
+    Route("/api/assemblies/{aid}/order", put_order, methods=["PUT"]),
+    Route("/api/assemblies/{aid}/order", delete_order, methods=["DELETE"]),
+    Route("/api/assemblies/{aid}/export", export_timeline, methods=["GET"]),
 ]

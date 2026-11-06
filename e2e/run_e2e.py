@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import base64
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -232,12 +233,45 @@ def main():
             page.wait_for_url("**/a/*")
             page.locator('input[type="file"][multiple]').set_input_files([str(p) for p in assembly_clips(data)])
             expect(page.locator(".clip-card")).to_have_count(4, timeout=60000)
+            expect(page.get_by_text("4 of 4 uploaded · 0 uploading · 0 failed")).to_be_visible(timeout=60000)   # 3 at a time
             expect(page.locator("ol.cutlist > li")).to_have_count(4, timeout=240000)
             order = page.locator("ol.cutlist h4").all_inner_texts()
             print("assembly order:", order)
             assert order[0].endswith("A001_titles.mp4") and order[-1].endswith("Z999_credits.mp4"), order
             time.sleep(1)
             page.screenshot(path=shots / "11b-assembly.png", full_page=True)
+            # the director's own order: keyboard move (focus stays on the moved clip, announced), drag and drop,
+            # "Check my order" with plain-language notes, EDL download of that order, reset to suggested
+            used = page.locator("ol.order-list.used .order-name")
+            expect(page.get_by_role("heading", name="Your order")).to_be_visible()
+            names = [re.sub(r"^\d+\.\s*", "", n) for n in used.all_inner_texts()]
+            assert names == [re.sub(r"^\d+\.\s*", "", o) for o in order], (names, order)
+            mover = page.get_by_role("button", name=f"Move down: {names[1]}")
+            mover.focus()
+            page.keyboard.press("Enter")
+            expect(page.get_by_role("status").filter(has_text=f"{names[1]} moved to position 3 of 4")).to_have_count(1)
+            assert page.evaluate("document.activeElement.getAttribute('aria-label')") == f"Move down: {names[1]}"
+            assert [re.sub(r"^\d+\.\s*", "", n) for n in used.all_inner_texts()] == [names[0], names[2], names[1], names[3]]
+            items = page.locator("ol.order-list.used > li.order-item")
+            items.nth(3).drag_to(items.nth(0))                                    # credits dragged to the top
+            after = [re.sub(r"^\d+\.\s*", "", n) for n in used.all_inner_texts()]
+            assert after[0] == "Z999_credits.mp4", after
+            expect(page.get_by_text("Changed since the last check.")).to_be_visible()
+            page.get_by_role("button", name="Check my order").click()
+            expect(page.locator(".check-note").filter(has_text="end credits")).to_be_visible(timeout=30000)
+            expect(page.locator(".check-note").filter(has_text="Do this:")).not_to_have_count(0)
+            page.screenshot(path=shots / "11c-assembly-my-order.png", full_page=True)
+            with page.expect_download() as dl:
+                page.get_by_role("button", name="EDL — my order").click()
+            edl = Path(dl.value.path()).read_text(encoding="utf-8")
+            assert dl.value.suggested_filename.endswith(".edl"), dl.value.suggested_filename
+            assert edl.startswith("TITLE: Launch day") and edl.index("Z999_credits.mp4") < edl.index("A001_titles.mp4"), edl
+            with page.expect_download() as dl:
+                page.get_by_role("button", name="FCPXML — suggested cut").click()
+            assert "<fcpxml version=\"1.9\">" in Path(dl.value.path()).read_text(encoding="utf-8")
+            page.get_by_role("button", name="Reset to suggested").click()
+            expect(page.get_by_role("status").filter(has_text="Back to the suggested cut.")).to_have_count(1)
+            assert [re.sub(r"^\d+\.\s*", "", n) for n in used.all_inner_texts()] == names
             page.get_by_role("link", name="Private dashboard").click()
             expect(page.locator(".reel")).to_have_count(1)                       # only the assembly; its clips are inside it
             page.locator(".reel a.title").click()
