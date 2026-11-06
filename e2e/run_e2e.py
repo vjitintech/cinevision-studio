@@ -250,7 +250,7 @@ def main():
             mover.focus()
             page.keyboard.press("Enter")
             expect(page.get_by_role("status").filter(has_text=f"{names[1]} moved to position 3 of 4")).to_have_count(1)
-            assert page.evaluate("document.activeElement.getAttribute('aria-label')") == f"Move down: {names[1]}"
+            expect(mover).to_be_focused()                 # focus follows the moved clip (React re-renders first)
             assert [re.sub(r"^\d+\.\s*", "", n) for n in used.all_inner_texts()] == [names[0], names[2], names[1], names[3]]
             items = page.locator("ol.order-list.used > li.order-item")
             items.nth(3).drag_to(items.nth(0))                                    # credits dragged to the top
