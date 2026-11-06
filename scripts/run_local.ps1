@@ -41,7 +41,8 @@ if (-not (Test-Path ".venv\Scripts\python.exe")) {
 }
 
 # --- Update Python packages when backend\requirements.txt changed (e.g. after git pull) ---
-$reqHash = (Get-FileHash backend\requirements.txt -Algorithm SHA256).Hash
+$sha = [System.Security.Cryptography.SHA256]::Create()
+$reqHash = [System.BitConverter]::ToString($sha.ComputeHash([System.IO.File]::ReadAllBytes((Join-Path (Get-Location) "backend\requirements.txt")))) -replace "-", ""
 $stamp = ".venv\requirements.sha256"
 if (-not (Test-Path $stamp) -or (Get-Content $stamp -Raw).Trim() -ne $reqHash) {
   Write-Host "Updating Python packages for this version..."
