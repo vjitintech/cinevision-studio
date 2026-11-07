@@ -313,7 +313,9 @@ def assemble(clips: list[dict], script: str | None, _out: dict | None = None) ->
                 continue
             if a["setting"][:5] == b["setting"][:5] and a["time"] == b["time"] and _look_distance(a, b) < 0.06 \
                     and abs(a["duration"] - b["duration"]) <= max(1.0, 0.25 * max(a["duration"], b["duration"])) \
-                    and abs(a["size_rank"] - b["size_rank"]) < 0.6:
+                    and (abs(a["size_rank"] - b["size_rank"]) < 0.6
+                         # a subject found in one take but missed in the other makes its shot size unknown, not different
+                         or (min(a["people"], b["people"]) == 0 < max(a["people"], b["people"]))):
                 worse, better = (b, a) if len(flags[b["id"]]) >= len(flags[a["id"]]) else (a, b)
                 dup_of[worse["id"]] = better["id"]
                 flags[worse["id"]].append({"code": "duplicate", "params": {"other": better["name"]}})

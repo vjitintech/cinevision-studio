@@ -371,3 +371,22 @@ def test_assembly_takes_more_than_20_clips_an_hour(tmp_path_factory):
         assert statuses[:20] == [201] * 20 and statuses[20] == 429, statuses
     finally:
         stop_server(proc)
+
+
+def test_take_whose_subject_was_missed_is_still_a_duplicate():
+    """Seen on Windows CI: the face detector found the actor in take 1 but not in the near-identical take 2."""
+    from cinevision.assembly import engine as E
+
+    def clip(cid, people, size):
+        return {"id": cid, "name": f"{cid}.mp4", "meta": {"width": 1280, "height": 720, "fps": 24, "duration_s": 4},
+                "analysis": {"clip": {"duration_s": {"value": 4, "confidence": 1}},
+                             "environment": {"setting": {"value": "indoor", "confidence": 0.8},
+                                             "time_of_day": {"value": "day", "confidence": 0.8}},
+                             "color": {"mean_luminance": {"value": 0.5, "confidence": 1},
+                                       "palette": {"value": [{"hex": "#334455"}, {"hex": "#aa8866"}], "confidence": 1}},
+                             "subjects": {"max_visible": {"value": people, "confidence": 0.7}},
+                             "shots": [{"start_s": 0, "end_s": 4, "shot_size": {"value": size, "confidence": 0.6},
+                                        "composition": {}}]}}
+    out = E.assemble([clip("A003_take1", 1, "medium close-up"), clip("A004_take2", 0, "extreme wide")], None)
+    rejected = {x["name"]: [f["code"] for f in x["flags"]] for x in out["rejected"]}
+    assert "duplicate" in rejected.get("A004_take2.mp4", []), out
