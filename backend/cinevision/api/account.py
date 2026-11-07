@@ -104,6 +104,11 @@ async def health(request: Request):
     return ok({"status": "ok"})
 
 
+def _page_links() -> bool:
+    from ..media.fetch import page_links_supported
+    return page_links_supported()
+
+
 async def capabilities(request: Request):
     ctx = current(request)
     s = settings()
@@ -113,6 +118,7 @@ async def capabilities(request: Request):
                    "max_width": s.max_width, "max_height": s.max_height,
                    "extensions": [".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi"],
                    "codecs": list(s.allowed_video_codecs)},
+        "video_links": {"files": True, "video_sites": _page_links()},
         "malware_scanning": "configured" if s.clamd_socket else "not_configured",
         "adapters": registry.list_adapters(ctx.uid),
         "telemetry": "none",

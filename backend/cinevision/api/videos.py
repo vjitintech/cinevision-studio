@@ -83,7 +83,8 @@ class _UploadSink:
             self.fh.close()
 
 
-def _store_upload(ctx, pid: str, tmp_path: Path, filename: str) -> dict:
+def store_clip(ctx, pid: str, tmp_path: Path, filename: str, source: str = "upload") -> dict:
+    """Validate, scan, encrypt and register a clip file (an upload, or a download from a pasted link)."""
     s = settings()
     meta = probe.validate(tmp_path, filename, s)
     try:
@@ -113,14 +114,11 @@ def _store_upload(ctx, pid: str, tmp_path: Path, filename: str) -> dict:
         c.execute("UPDATE projects SET updated_at=? WHERE id=?", (db.now_iso(), pid))
     job = jobs.enqueue(owner_id=ctx.uid, project_id=pid, kind="ingest", idem_key=f"ingest:{vid}", params={"video_id": vid})
     audit.record("video.upload", user_id=ctx.uid, target_type="project", target_id=pid, ip=ctx.ip,
-                 details={"bytes": tmp_path.stat().st_size})
+                 details={"bytes": tmp_path.stat().st_size, "source": source})
     return {"video_id": vid, "metadata": meta, "scan_status": scan_status, "job": jobs.public(job)}
 
 
-async def upload_video(request: Request):
-    ctx = current(request)
-    pid = request.path_params["pid"]
-    owned_project(ctx, pid)
+def _upload_allowed(ctx, pid: str) -> None:
     # a movie assembly takes up to 300 clips, so its clips get their own, larger hourly allowance (twice the clip
     # cap, for retries); single projects keep 20 an hour
     asm = db.one("SELECT 1 FROM assembly_clips WHERE clip_project_id=?", (pid,)) is not None
@@ -130,6 +128,15 @@ async def upload_video(request: Request):
         raise ApiError(429, "rate_limited", "Too many uploads. Try again later.", {"Retry-After": str(wait)})
     if db.one("SELECT 1 FROM uploaded_videos WHERE project_id=?", (pid,)):
         raise ApiError(409, "video_exists", "This project already has a clip. Remove it first to replace it.")
+    if db.one("SELECT 1 FROM render_jobs WHERE project_id=? AND kind='fetch' AND status IN ('queued','processing')", (pid,)):
+        raise ApiError(409, "video_exists", "A video is already being downloaded for this project.")
+
+
+async def upload_video(request: Request):
+    ctx = current(request)
+    pid = request.path_params["pid"]
+    owned_project(ctx, pid)
+    _upload_allowed(ctx, pid)
     s = settings()
     clen = request.headers.get("content-length")
     if clen and clen.isdigit() and int(clen) > s.max_upload_bytes + 64 * 1024:
@@ -154,12 +161,36 @@ async def upload_video(request: Request):
         if not sink.filename or sink.size == 0:
             raise ApiError(422, "no_file", "No clip was included in the upload.")
         try:
-            result = await run_in_threadpool(_store_upload, ctx, pid, tmpdir / "upload.bin", sink.filename)
+            result = await run_in_threadpool(store_clip, ctx, pid, tmpdir / "upload.bin", sink.filename)
         except probe.ValidationError as e:
             audit.record("video.upload", user_id=ctx.uid, outcome="failure", target_type="project", target_id=pid,
                          ip=ctx.ip, details={"reason": e.code})
             raise ApiError(422, e.code, str(e))
     return ok(result, 201)
+
+
+class LinkReq(BaseModel):
+    url: str = Field(min_length=4, max_length=2000)
+
+
+async def video_from_link(request: Request):
+    """Bring the clip in from a pasted link. The download runs as a job (it can take a while for big files)."""
+    from ..media import fetch as F
+    ctx = current(request)
+    pid = request.path_params["pid"]
+    owned_project(ctx, pid)
+    body = await parse(request, LinkReq)
+    try:
+        url = F.normalise(F.clean_url(body.url))
+        await run_in_threadpool(F.check_public, url, settings().url_import_allow_private)
+    except F.FetchError as e:
+        raise ApiError(422, "bad_link", str(e)) from None
+    _upload_allowed(ctx, pid)
+    job = jobs.enqueue(owner_id=ctx.uid, project_id=pid, kind="fetch", idem_key=f"fetch:{pid}:{db.new_id()}",
+                       params={"url": body.url.strip()}, max_attempts=2)    # params are stored encrypted
+    audit.record("video.link", user_id=ctx.uid, target_type="project", target_id=pid, ip=ctx.ip,
+                 details={"source": "link"})
+    return ok({"job": jobs.public(job)}, 202)
 
 
 async def delete_video(request: Request):
@@ -258,6 +289,7 @@ async def frames(request: Request):
 routes = [
     Route("/api/projects/{pid}/video", upload_video, methods=["POST"]),
     Route("/api/projects/{pid}/video", delete_video, methods=["DELETE"]),
+    Route("/api/projects/{pid}/video/link", video_from_link, methods=["POST"]),
     Route("/api/projects/{pid}/media-token", media_token, methods=["POST"]),
     Route("/api/projects/{pid}/frames", frames, methods=["GET"]),
     Route("/api/media/{bid}", media, methods=["GET"]),

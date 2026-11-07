@@ -91,7 +91,9 @@ def main():
             b = p.chromium.launch()
             ctx = b.new_context(viewport={"width": 1500, "height": 950}, accept_downloads=True)
             page = ctx.new_page()
-            page.on("console", lambda m: errors.append(f"console.{m.type}: {m.text}") if m.type in ("error",) else None)
+            # the browser logs every 4xx as a console error; the deliberately refused link (422) is expected
+            page.on("console", lambda m: errors.append(f"console.{m.type}: {m.text}")
+                    if m.type == "error" and "status of 422" not in m.text else None)
             page.on("response", lambda r: errors.append(f"http {r.status}: {r.request.method} {r.url.split('?')[0]} (on {page.url.split('?')[0]})") if (r.status == 404 or r.status >= 500 or (r.status == 409 and "ai-preview" not in r.url)) else None)
             page.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
             page.set_default_timeout(30000)
@@ -220,6 +222,21 @@ def main():
             page.get_by_label("Type the project name to confirm").fill("Sc. 14 — Launch pad, day")
             page.get_by_role("button", name="Delete project permanently").click()
             expect(page.get_by_text("No projects yet")).to_be_visible()
+
+            # paste-a-link: a link to this computer is refused with a plain reason (no download, nothing stored)
+            page.get_by_role("button", name="New project").click()
+            page.get_by_label("Name of your film or scene").fill("From a link")
+            page.get_by_role("button", name="Create and upload video").click()
+            expect(page.get_by_text("Or paste a link to the video")).to_be_visible()
+            page.get_by_role("textbox", name="https://").fill("http://127.0.0.1:9/secret.mp4")
+            page.get_by_role("button", name="Use this link").click()
+            expect(page.get_by_text("private network")).to_be_visible()
+            page.screenshot(path=shots / "02b-paste-link.png", full_page=True)
+            # delete straight from the dashboard: first click asks, second deletes
+            page.get_by_role("link", name="Private dashboard").click()
+            page.get_by_role("button", name="Delete: From a link").click()
+            page.get_by_role("button", name="Click again to delete: From a link").click()
+            expect(page.get_by_text("From a link")).to_have_count(0)
             # learn directing: chapters with lessons built from the review, practice focus from this user's videos
             page.get_by_role("link", name="Learn directing").click()
             expect(page.locator("section.chapter")).to_have_count(8)

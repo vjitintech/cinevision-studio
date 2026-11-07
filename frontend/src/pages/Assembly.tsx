@@ -44,6 +44,15 @@ export function NewAssembly() {
 interface QueueItem { id: string; name: string; progress: number; state: "waiting" | "uploading" | "retrying" | "done" | "failed"; error?: string }
 interface Clip { clip_id: string; name: string | null; status: string; thumb: string | null; meta: any; job: any }
 
+/** A readable clip name for a pasted link: the file name in it, or "Link N". */
+function linkName(u: string, i: number): string {
+  try {
+    const last = decodeURIComponent(new URL(/^https?:/i.test(u) ? u : `https://${u}`).pathname.split("/").pop() || "");
+    if (/\.(mp4|mov|m4v|mkv|webm|avi)$/i.test(last)) return last.slice(0, 120);
+  } catch { /* not a URL we can read: fall through */ }
+  return `Link ${i + 1}`;
+}
+
 /** Seconds until a signed media URL ("/api/media/<id>?t=<exp>.<sig>") expires; 0 if it can't be read. */
 function urlLife(u: string | null | undefined): number {
   const m = /[?&]t=(\d+)\./.exec(u || "");
@@ -105,6 +114,30 @@ export function AssemblyPage({ aid }: { aid: string }) {
   const busyClips = a?.clips.some((c: Clip) => c.status !== "analysed" && c.status !== "failed" && c.job?.status !== "failed");
   const busyJob = a?.jobs.some((j: any) => j.status === "queued" || j.status === "processing");
   usePoll(load, !!a && !deleting && (busyClips || busyJob || queue.some((q) => q.state !== "done" && q.state !== "failed")), 2500);
+
+  const [links, setLinks] = useState("");
+  /** Clips from pasted links: each becomes a clip whose video the server downloads, then analyses as usual. */
+  const addLinks = async () => {
+    const urls = Array.from(new Set(links.split(/\s+/).map((x) => x.trim()).filter((x) => /^(https?:\/\/)?[\w.-]+\.[a-z]{2,}\//i.test(x))));
+    if (!urls.length) return;
+    setLinks("");
+    const items = urls.map((u, i) => ({ u, id: `link-${Date.now()}-${i}`, name: linkName(u, i) }));
+    setQueue((q) => [...q, ...items.map(({ id, name }) => ({ id, name, progress: 0, state: "waiting" as const }))]);
+    const patch = (id: string, p: Partial<QueueItem>) => setQueue((q) => q.map((x) => (x.id === id ? { ...x, ...p } : x)));
+    for (const { u, id, name } of items) {          // quick requests: the downloads themselves run on the server
+      let clipId: string | null = null;
+      try {
+        patch(id, { state: "uploading", progress: 0.5 });
+        clipId = (await api("POST", `/api/assemblies/${aid}/clips`, { filename: name })).clip_id;
+        await api("POST", `/api/projects/${clipId}/video/link`, { url: u });
+        patch(id, { state: "done", progress: 1 });
+      } catch (e) {
+        patch(id, { state: "failed", error: e instanceof ApiError ? e.message : "Couldn't use that link." });
+        if (clipId) api("DELETE", `/api/assemblies/${aid}/clips/${clipId}`).catch(() => undefined);
+      }
+      load();
+    }
+  };
 
   const addFiles = async (files: File[]) => {
     const items = files.filter((f) => /\.(mp4|mov|m4v|mkv|webm|avi)$/i.test(f.name))
@@ -183,6 +216,12 @@ export function AssemblyPage({ aid }: { aid: string }) {
         <p className="small muted">{t("asm_drop_hint3", { n: a.max_clips })}</p>
         <input ref={input} type="file" hidden multiple accept=".mp4,.mov,.m4v,.mkv,.webm,.avi,video/*" onChange={(e) => addFiles(Array.from(e.target.files || []))} />
       </div>
+      <form className="linkbox" onSubmit={(e) => { e.preventDefault(); addLinks(); }}>
+        <label className="small" htmlFor="asm-links"><strong>{t("asm_links")}</strong></label>
+        <textarea id="asm-links" rows={3} value={links} onChange={(e) => setLinks(e.target.value)} placeholder={t("asm_links_ph")} />
+        <div className="row"><span className="small muted grow">{t("link_hint")} {t("link_rights")}</span>
+          <button type="submit" disabled={!links.trim()}>{t("asm_links_add")}</button></div>
+      </form>
       {queue.length > 0 && (
         <div className="upload-queue">
           <p className="small" role="status" aria-live="polite">{t("asm_upload_counts", {

@@ -26,9 +26,15 @@ The zip is not code-signed yet, so Windows SmartScreen may say "Windows protecte
 **More info → Run anyway** only if you downloaded it from the project's Releases page.
 
 What is inside: the official python.org *embeddable* Python 3.13 with the backend packages, the prebuilt web
-interface, FFmpeg (gyan.dev "essentials" build, GPL — see `ffmpeg\SOURCE.txt`) and the Microsoft C++ runtime DLLs.
+interface, FFmpeg (gyan.dev "essentials" build, GPL — see `ffmpeg\SOURCE.txt`), yt-dlp (for pasting YouTube / Vimeo
+links) and the Microsoft C++ runtime DLLs.
 Optional: install Tesseract OCR (`winget install UB-Mannheim.TesseractOCR`); CineVision finds it in
 `C:\Program Files\Tesseract-OCR` automatically.
+
+**Pasting a video link instead of uploading.** Direct links to a video file and Google Drive / Dropbox share links
+always work. Links to video websites (YouTube, Vimeo, Instagram…) need yt-dlp: it is inside the zip; in the source
+version run `.\.venv\Scripts\pip install yt-dlp`. Links to this computer or your home network are refused for
+safety; to import from a NAS on your network, start CineVision with `CINEVISION_URL_IMPORT_ALLOW_PRIVATE=true`.
 
 The zip is built by `scripts\build_windows_portable.ps1` in the `release-windows` GitHub workflow, which also starts
 the unzipped app with an empty PATH, checks the web interface and a sign-up, and starts it a second time.

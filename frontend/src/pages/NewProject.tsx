@@ -45,7 +45,39 @@ export function UploadBox({ pid, onUploaded }: { pid: string; onUploaded: () => 
         </div>
       )}
       <ErrorNote error={error} />
+      {!BROWSER && progress === null && <LinkBox pid={pid} onStarted={onUploaded} />}
     </div>
+  );
+}
+
+/** "Or paste a link": the server downloads the video (direct file, Drive/Dropbox share link, or a video site
+ *  when yt-dlp is installed) and then treats it exactly like an upload. */
+export function LinkBox({ pid, onStarted }: { pid: string; onStarted: () => void }) {
+  const { t } = useT();
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sites, setSites] = useState<boolean | null>(null);
+  useEffect(() => { api("GET", "/api/system/capabilities").then((c) => setSites(!!c.video_links?.video_sites)).catch(() => {}); }, []);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!url.trim()) return;
+    setBusy(true); setError(null);
+    try { await api("POST", `/api/projects/${pid}/video/link`, { url: url.trim() }); onStarted(); }
+    catch (err) { setError(err instanceof ApiError ? err.message : "Couldn't use that link."); }
+    finally { setBusy(false); }
+  };
+  return (
+    <form className="linkbox" onSubmit={submit} onClick={(e) => e.stopPropagation()}>
+      <p className="small"><strong>{t("link_or")}</strong></p>
+      <div className="row">
+        <input className="grow" type="url" inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)}
+          placeholder={t("link_placeholder")} aria-label={t("link_placeholder")} maxLength={2000} />
+        <button type="submit" className="primary" disabled={busy || !url.trim()}>{busy ? "…" : t("link_add")}</button>
+      </div>
+      <p className="small muted">{sites === false ? t("link_hint_files") : t("link_hint")} {t("link_rights")}</p>
+      <ErrorNote error={error} />
+    </form>
   );
 }
 

@@ -11,6 +11,7 @@ from .. import db, jobs, storage
 from ..config import settings
 from ..keys import keyring
 from ..media import sandbox
+from ..web import ApiError
 from ..worker import UserFacingError, handler
 
 MAX_KEYFRAMES = 120
@@ -338,3 +339,37 @@ def assemble(ctx: jobs.JobContext, params: dict) -> str:
                    k.enc_json(ai_all, f"assembly_results:ai:{aid}") if ai_all else None, db.now_iso()))
         c.execute("UPDATE projects SET updated_at=? WHERE id=?", (db.now_iso(), aid))
     return aid
+
+
+@handler("fetch")
+def fetch_from_link(ctx: jobs.JobContext, params: dict) -> str:
+    """Download a video from a pasted link, then treat it exactly like an upload (checks, encryption, ingest)."""
+    from types import SimpleNamespace
+
+    from ..api import videos as V
+    from ..media import fetch as F
+    from ..media import probe
+    owner, pid = ctx.job["owner_id"], ctx.job["project_id"]
+    proj = db.one("SELECT status FROM projects WHERE id=? AND owner_id=?", (pid, owner))
+    if not proj or proj["status"] != "active":
+        raise jobs.Cancelled()
+    if db.one("SELECT 1 FROM uploaded_videos WHERE project_id=?", (pid,)):
+        return "already has a clip"
+    s = settings()
+    ctx.progress(0.02, "Connecting to the link")
+    with storage.private_tempdir("fetch-") as tmp:
+        try:
+            path, name = F.fetch(params["url"], tmp, s.max_upload_bytes, ctx.progress, s.ffmpeg_bin,
+                                 s.url_import_allow_private)
+        except F.FetchError as e:
+            raise UserFacingError(str(e), retryable=e.retryable) from None
+        ctx.progress(0.97, "Checking and encrypting the video")
+        if Path(name).suffix.lower() not in F.VIDEO_EXT:
+            name = Path(name).stem + ".mp4"
+        try:
+            V.store_clip(SimpleNamespace(uid=owner, ip=None), pid, path, name, source="link")
+        except probe.ValidationError as e:
+            raise UserFacingError(f"The downloaded file isn't a usable video: {e}") from None
+        except ApiError as e:
+            raise UserFacingError(e.message) from None
+    return "downloaded"

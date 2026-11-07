@@ -281,3 +281,8 @@ details[open] > summary { color: var(--text); }
 .check-note { border-inline-start: 3px solid var(--tungsten); background: #261f17; padding: 6px 10px; margin-bottom: 6px; border-radius: 0 var(--radius-s) var(--radius-s) 0; }
 .check-note.info { border-inline-start-color: var(--daylight); background: #1a222c; }
 .check-note.ok { border-inline-start-color: #6fbf73; background: #18221a; }
+
+/* paste-a-link boxes */
+.linkbox { margin-top: 16px; text-align: left; display: grid; gap: 8px; }
+.linkbox input, .linkbox textarea { width: 100%; }
+.dropzone .linkbox { max-width: 560px; margin: 18px auto 0; padding-top: 14px; border-top: 1px solid var(--line); }

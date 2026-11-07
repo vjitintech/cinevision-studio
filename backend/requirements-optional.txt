@@ -10,3 +10,7 @@ faster-whisper>=1.0
 #   Windows: https://github.com/UB-Mannheim/tesseract/wiki  (default path is detected)
 #   macOS:   brew install tesseract tesseract-lang
 #   Linux:   apt install tesseract-ocr (+ tesseract-ocr-<lang> for other languages)
+#
+# "Paste a link" for video websites (YouTube, Vimeo, Instagram, …). Direct video links and Google Drive /
+# Dropbox share links work without it. Keep it up to date (sites change often): pip install -U yt-dlp
+yt-dlp

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import { linkTo, navigate } from "../router";
 import { ErrorNote } from "../components/common";
 import { useT } from "../i18n";
@@ -8,6 +8,12 @@ interface Row { id: string; title: string; updated_at: string; video_status: str
 
 function Thumb({ pid, ready }: { pid: string; ready: boolean }) {
   const [src, setSrc] = useState<string | null>(null);
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => {
+    const h = (e: Event) => { if ((e as CustomEvent).detail === pid) setHidden(true); };
+    window.addEventListener("cv-hide-thumb", h);
+    return () => window.removeEventListener("cv-hide-thumb", h);
+  }, [pid]);
   useEffect(() => {
     if (!ready) return;
     api("GET", `/api/projects/${pid}/frames`).then((r) => {
@@ -15,17 +21,43 @@ function Thumb({ pid, ready }: { pid: string; ready: boolean }) {
       if (f) setSrc(f.url);
     }).catch(() => {});
   }, [pid, ready]);
-  return <div className="reel-thumb">{src ? <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "No clip yet"}</div>;
+  return <div className="reel-thumb">{src && !hidden ? <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "No clip yet"}</div>;
 }
 
 const STATUS: Record<string, [string, string]> = {
   ready: ["ready", "Analysed"], validated: ["busy", "Queued"], ingesting: ["busy", "Preparing"], failed: ["failed", "Processing failed"],
 };
 
+/** Two-step delete on the dashboard: first click asks, second click deletes. The row's picture is removed
+ *  first, so nothing is still loading from the project while it is deleted. */
+function DeleteButton({ row, onDeleted, onError }: { row: Row; onDeleted: () => void; onError: (m: string) => void }) {
+  const { t } = useT();
+  const [step, setStep] = useState<"idle" | "confirm" | "busy">("idle");
+  useEffect(() => { if (step !== "confirm") return; const id = setTimeout(() => setStep("idle"), 5000); return () => clearTimeout(id); }, [step]);
+  const go = async () => {
+    if (step === "idle") { setStep("confirm"); return; }
+    if (step !== "confirm") return;
+    setStep("busy");
+    window.dispatchEvent(new CustomEvent("cv-hide-thumb", { detail: row.id }));
+    await new Promise((r) => setTimeout(r, 400));
+    try {
+      await api("DELETE", row.kind === "assembly" ? `/api/assemblies/${row.id}` : `/api/projects/${row.id}`);
+      onDeleted();
+    } catch (e) { setStep("idle"); onError(e instanceof ApiError ? e.message : "Delete failed."); }
+  };
+  return (
+    <button type="button" className={step === "confirm" ? "danger" : "ghost"} onClick={go} disabled={step === "busy"}
+      aria-label={`${step === "confirm" ? t("dash_delete_confirm") : t("dash_delete")}: ${row.title}`}>
+      {step === "confirm" ? t("dash_delete_confirm") : step === "busy" ? t("deleting") : t("dash_delete")}
+    </button>
+  );
+}
+
 export function Dashboard() {
   const { t } = useT();
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const drop = (id: string) => setRows((r) => (r ? r.filter((x) => x.id !== id) : r));
   useEffect(() => { api("GET", "/api/projects").then((r) => setRows(r.projects)).catch((e) => setError(e.message)); }, []);
   return (
     <div className="page">
@@ -57,7 +89,8 @@ export function Dashboard() {
                   <div className="row small"><span className="muted">{t("dash_assembly", { n: p.clip_count || 0 })}</span>
                     <span className="faint">Updated {new Date(p.updated_at).toLocaleString()}</span></div>
                 </div>
-                <a {...linkTo(`/a/${p.id}`)}>Open</a>
+                <div className="row"><a {...linkTo(`/a/${p.id}`)}>Open</a>
+                  <DeleteButton row={p} onDeleted={() => drop(p.id)} onError={setError} /></div>
               </div>
             );
           }
@@ -73,7 +106,8 @@ export function Dashboard() {
                   <span className="faint">Updated {new Date(p.updated_at).toLocaleString()}</span>
                 </div>
               </div>
-              <a {...linkTo(`/p/${p.id}`)}>Open</a>
+              <div className="row"><a {...linkTo(`/p/${p.id}`)}>Open</a>
+                <DeleteButton row={p} onDeleted={() => drop(p.id)} onError={setError} /></div>
             </div>
           );
         })}

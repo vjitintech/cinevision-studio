@@ -79,6 +79,9 @@ New-Item -ItemType Directory -Force -Path $site | Out-Null
 Step "Installing the backend packages into the embedded Python"
 Invoke-Checked $hostPy @("-m", "pip", "install", "--disable-pip-version-check", "--no-cache-dir", "--prefer-binary",
   "--no-warn-script-location", "--target", $site, "-r", (Join-Path $root "backend\requirements.txt"))
+# yt-dlp (pure Python, Unlicense): lets "paste a link" take YouTube/Vimeo/Instagram links, not only video files
+Invoke-Checked $hostPy @("-m", "pip", "install", "--disable-pip-version-check", "--no-cache-dir",
+  "--no-warn-script-location", "--target", $site, "yt-dlp")
 # console-script launchers point at the build machine's python.exe: useless (and confusing) in the zip
 $bin = Join-Path $site "bin"
 if (Test-Path $bin) { Remove-Item -Recurse -Force $bin }

@@ -173,7 +173,12 @@ export function Workspace({ pid, section }: { pid: string; section: string }) {
           <LeftPanel />
         </aside>
         <section className="ws-center" ref={centerRef}>
-          {needsClip && section !== "settings" ? (
+          {needsClip && section !== "settings" && activeJobs.some((j) => j.kind === "fetch") ? (
+            <div className="stack" style={{ maxWidth: 640 }} role="status">
+              <h2>{t("job_fetch")}…</h2>
+              {activeJobs.filter((j) => j.kind === "fetch").map((j) => <JobCard key={j.id} job={j} onChange={reload} />)}
+            </div>
+          ) : needsClip && section !== "settings" ? (
             <div className="stack" style={{ maxWidth: 640 }}>
               <h2>Add a clip to begin</h2>
               <p className="muted">Concepts are built from what's actually in your footage, so analysis needs a clip first.</p>
@@ -182,7 +187,7 @@ export function Workspace({ pid, section }: { pid: string; section: string }) {
           ) : <Section.Center />}
         </section>
         <aside className="ws-right" aria-label="Controls">
-          {activeJobs.map((j) => <JobCard key={j.id} job={j} onChange={reload} />)}
+          {activeJobs.filter((j) => !(needsClip && j.kind === "fetch")).map((j) => <JobCard key={j.id} job={j} onChange={reload} />)}
           {(project.jobs || []).filter((j) => j.status === "failed").slice(0, 1).map((j) => <JobCard key={j.id} job={j} onChange={reload} />)}
           <Section.Right />
         </aside>

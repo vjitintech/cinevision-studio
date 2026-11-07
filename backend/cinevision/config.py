@@ -72,6 +72,7 @@ class Settings:
     analysis_budget_s: int = 900              # time budget for detailed per-shot analysis of long films
     whisper_model: str = "small"              # faster-whisper model name or local path (speech to text)
     tesseract_bin: str | None = None          # Tesseract OCR binary; default: found on PATH
+    url_import_allow_private: bool = False    # let "paste a link" reach LAN/loopback addresses (e.g. a NAS)
     frontend_dist: Path = Path(__file__).resolve().parents[2] / "frontend" / "dist"
     extra: dict = field(default_factory=dict)
 
@@ -163,6 +164,7 @@ def load_settings() -> Settings:
         analysis_budget_s=max(60, _int("CINEVISION_ANALYSIS_BUDGET_S", 900)),
         whisper_model=_env("CINEVISION_WHISPER_MODEL", "small") or "small",
         tesseract_bin=_env("CINEVISION_TESSERACT"),
+        url_import_allow_private=_bool("CINEVISION_URL_IMPORT_ALLOW_PRIVATE", False),
     )
     dist = _env("CINEVISION_FRONTEND_DIST")
     if dist:
